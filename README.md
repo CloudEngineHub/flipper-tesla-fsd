@@ -62,9 +62,9 @@
 - **Recommended banned-car combination**: enable **TLSSC Restore** + **TLSSC bit38** (`0x3FD` mux 0 bit 38) together — confirmed reliable on HW3 / 2026.2.6 by @RoyRakete ([#18](https://github.com/hypery11/flipper-tesla-fsd/issues/18#issuecomment-4413430516)). Either toggle alone is unreliable on some banned firmware; the pair re-enables AP/TACC engagement
 
 ### Ban Shield (v2.9+)
-- Freezes `GTW_carConfig` (`0x7FF`) in its healthy state
+- Watches `GTW_carConfig` (`0x7FF`) and rewrites the bus broadcast back to its learned-healthy pattern in real time
 - Learns all 8 mux frames on first run, then auto-arms
-- Any server-side ban push is blocked at the CAN frame level in real-time
+- **Important caveat:** this is a **CAN-broadcast-layer mask**, not entitlement-layer protection. Tesla's ban writes to GTW NVRAM (which survives reboots) and to server-side flags; Ban Shield only rewrites what other on-bus ECUs see, not the underlying NVRAM state or Tesla's backend record. No empirical case where Ban Shield prevented a ban has been confirmed — it is a defense-in-depth measure based on attack-surface analysis. See [#60](https://github.com/hypery11/flipper-tesla-fsd/issues/60) for the full honest writeup
 
 ### Nag Killer (v2.1+)
 - DAS-aware gating — only echoes when DAS is actually demanding hands-on, zero bus traffic when DAS is satisfied
@@ -94,7 +94,7 @@
 | **Force FSD** | Bypass the `isFSDSelectedInUI` check. Does not bypass Tesla's server-side entitlement — only affects local CAN frame flow. |
 | **TLSSC Restore** | 0x331 DAS config spoof to recover TLSSC on banned vehicles. Triggers MCU reboot. |
 | **AP-First (14.x)** | Delay 0x3FD injection until AP is engaged. Required for Tesla firmware 2026.14.x. |
-| **Ban Shield** | Freeze `GTW_carConfig` (0x7FF) to block server-side VIN bans. Auto-learns healthy state, then arms. |
+| **Ban Shield** | Rewrite `GTW_carConfig` (0x7FF) broadcasts back to a learned-healthy pattern. CAN-broadcast-layer mask only — does not undo NVRAM or backend-side ban flags. Defense-in-depth, no confirmed ban-prevention case ([#60](https://github.com/hypery11/flipper-tesla-fsd/issues/60)). |
 | **Suppress Chime** | Kill the ISA speed warning chime (HW4 only, `0x399`). |
 | **Emerg. Vehicle** | Enable emergency vehicle detection flag (HW4 only, bit59). |
 | **Precondition** | Battery preheat trigger via `0x082`. |

@@ -67,7 +67,7 @@ typedef struct {
     bool precondition;       // periodic 0x082 inject for battery preheat
     OpMode op_mode;          // Active / ListenOnly / Service
     uint8_t mcp_clock;       // 0 = 16MHz (default), 1 = 8MHz
-    bool gtw_shield;         // 0x7FF ban defense shield
+    bool gtw_shield;         // 0x7FF GTW Config Replay — replay learned-healthy frames
     bool tlssc_restore;      // 0x331 DAS config spoof to restore TLSSC
     bool ap_first;           // 2026.14.x: delay injection until AP is engaged
     bool gtw_tier_override;  // 0x7FF active tier=SELF_DRIVING override

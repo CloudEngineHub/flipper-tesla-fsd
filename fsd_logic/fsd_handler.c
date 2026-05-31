@@ -461,17 +461,21 @@ void fsd_handle_gtw_autopilot_tier(FSDState* state, const CANFRAME* frame) {
     state->gtw_autopilot_tier = (int8_t)((frame->buffer[5] >> 2) & 0x07);
 }
 
-// --- 0x7FF Shield (ban defense) ---
+// --- 0x7FF GTW Config Replay (formerly "Ban Shield") ---
 //
-// Phase 1 (shield NOT armed): learn the "healthy" 0x7FF state by
-// capturing each mux frame. Once all 8 muxes are seen, the snapshot
-// is complete and can be armed.
+// Phase 1 (NOT armed): learn the "healthy" 0x7FF state by capturing
+// each mux frame. Once all 8 muxes are seen, the snapshot is complete
+// and the replayer auto-arms.
 //
-// Phase 2 (shield armed): compare every incoming 0x7FF against the
-// snapshot. If ANY byte differs, overwrite the frame data with the
-// snapshot and return true — the caller retransmits immediately,
-// racing the Gateway's banned frame so the AP ECU sees our healthy
+// Phase 2 (armed): compare every incoming 0x7FF against the snapshot.
+// If ANY byte differs, replay the snapshot bytes into the frame and
+// return true — the caller retransmits immediately, racing the
+// gateway's modified frame so the AP ECU sees the learned-healthy
 // version.
+//
+// This is a CAN-broadcast-layer mask only. It does not undo NVRAM
+// changes the gateway has already written, nor any backend-side
+// entitlement flags. Honest framing per #60.
 
 bool fsd_handle_gtw_shield(FSDState* state, CANFRAME* frame) {
     if(frame->data_lenght < 8) return false;
@@ -518,7 +522,8 @@ bool fsd_handle_gtw_shield(FSDState* state, CANFRAME* frame) {
 
 // --- 0x7FF Active Tier Override ---
 // Force GTW_autopilot to SELF_DRIVING (3) on every mux=2 frame.
-// More aggressive than Ban Shield — doesn't just freeze, actively writes.
+// More aggressive than GTW Config Replay — doesn't just replay learned state,
+// actively writes tier=3 regardless of what the gateway broadcasts.
 // Source: Shayennn/FUCKYOU-TESLA-FSD vehicle_logic.h
 
 bool fsd_handle_gtw_tier_override(FSDState* state, CANFRAME* frame) {

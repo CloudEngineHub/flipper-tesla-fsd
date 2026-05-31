@@ -119,7 +119,7 @@ static int32_t fsd_running_worker(void* context) {
     state.extra_highbeam_strobe = app->extra_highbeam_strobe;
     state.extra_turn_left = app->extra_turn_left;
     state.extra_turn_right = app->extra_turn_right;
-    // Ban Shield: don't arm immediately — learn healthy state first.
+    // GTW Config Replay: don't arm immediately — learn healthy state first.
     // gtw_shield_armed starts false; fsd_handle_gtw_shield() auto-arms
     // after all 8 mux snapshots are captured.
     bool shield_enabled = app->gtw_shield;
@@ -303,9 +303,9 @@ static int32_t fsd_running_worker(void* context) {
                 }
                 else if(frame.canId == CAN_ID_GTW_CONFIG_ETH) {
                     fsd_handle_gtw_autopilot_tier(&state, &frame);
-                    // Shield and tier override are mutually exclusive on the
-                    // same frame — shield freezes existing state, override
-                    // forces tier=3. Don't send two conflicting copies.
+                    // GTW Config Replay and Tier Override are mutually exclusive
+                    // on the same frame — replay re-emits the learned healthy state,
+                    // override forces tier=3. Don't send two conflicting copies.
                     if(shield_enabled) {
                         if(fsd_handle_gtw_shield(&state, &frame) && tx_allowed) {
                             send_can_frame(mcp, &frame);

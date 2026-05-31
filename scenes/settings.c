@@ -161,7 +161,7 @@ void tesla_fsd_scene_settings_on_enter(void* context) {
     ADD_TOGGLE("Force FSD",        force_fsd_changed,        force_fsd)
     ADD_TOGGLE("TLSSC Restore",    tlssc_restore_changed,    tlssc_restore)
     ADD_TOGGLE("AP-First (14.x)",  ap_first_changed,         ap_first)
-    ADD_TOGGLE("Ban Shield",       shield_changed,           gtw_shield)
+    ADD_TOGGLE("GTW Cfg Replay",   shield_changed,           gtw_shield)
     ADD_TOGGLE("Suppress Chime",   chime_changed,            suppress_speed_chime)
     ADD_TOGGLE("Emerg. Vehicle",   emerg_changed,            emergency_vehicle_detect)
     ADD_TOGGLE("Precondition",     precondition_changed,     precondition)

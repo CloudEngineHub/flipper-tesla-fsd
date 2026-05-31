@@ -256,7 +256,8 @@ Single-bus read-modify-retransmit on Party CAN. No MITM, no second bus tap.
 | `0x082` | `UI_tripPlanning` | TX | Battery preconditioning trigger |
 | `0x398` | `GTW_carConfig` | RX | HW version detection |
 | `0x318` | `GTW_carState` | RX | OTA detection (auto-suspend TX) |
-| `0x39B` | `DAS_status` | RX | ESP32 HW4 DAS status source; AP state (for AP-First), nag level, lane change, blind spot |
+| `0x399` | `DAS_status` (HW3/Legacy) / `ISA_speedLimit` (HW4) | RX/TX | HW-dispatched: pre-Highland HW3 reads as DAS_status (AP state + hands-on); HW4 keeps the chime-suppression write path |
+| `0x39B` | `DAS_status` | RX | HW4 + Highland HW3 — AP state (for AP-First), nag level, lane change, blind spot |
 | `0x132` | `BMS_hvBusStatus` | RX | Pack voltage / current |
 | `0x292` | `BMS_socStatus` | RX | State of charge |
 | `0x312` | `BMS_thermalStatus` | RX | Battery temperature |

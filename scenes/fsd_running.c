@@ -281,7 +281,7 @@ static int32_t fsd_running_worker(void* context) {
                     fsd_handle_esp_status(&state, &frame);
                 }
                 else if(frame.canId == CAN_ID_DAS_STATUS) {
-                    fsd_handle_das_status(&state, &frame);
+                    fsd_handle_das_status_hw4(&state, &frame);
                 }
                 else if(frame.canId == CAN_ID_DAS_STATUS2) {
                     fsd_handle_das_status2(&state, &frame);
@@ -362,9 +362,17 @@ static int32_t fsd_running_worker(void* context) {
                     if(fsd_handle_legacy_autopilot(&state, &frame) && tx_allowed) {
                         send_can_frame(mcp, &frame);
                     }
-                } else if(frame.canId == CAN_ID_ISA_SPEED && state.suppress_speed_chime) {
-                    if(fsd_handle_isa_speed_chime(&frame) && tx_allowed) {
-                        send_can_frame(mcp, &frame);
+                } else if(frame.canId == CAN_ID_ISA_SPEED) {
+                    // 0x399 is HW-dependent: HW4 = ISA chime, HW3/Legacy = DAS_status.
+                    // Suppress Chime is HW4-only because writing the HW4 ISA bits
+                    // on HW3 would corrupt the DAS_status payload.
+                    if(state.hw_version == TeslaHW_HW4) {
+                        if(state.suppress_speed_chime &&
+                           fsd_handle_isa_speed_chime(&frame) && tx_allowed) {
+                            send_can_frame(mcp, &frame);
+                        }
+                    } else {
+                        fsd_handle_das_status_hw3(&state, &frame);
                     }
                 } else if(frame.canId == CAN_ID_FOLLOW_DIST) {
                     fsd_handle_follow_distance(&state, &frame);

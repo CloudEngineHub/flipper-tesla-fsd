@@ -25,7 +25,8 @@
 #define CAN_ID_DI_SPEED       0x257  // 599  - DI_speed (vehicle speed, checksummed)
 #define CAN_ID_ESP_STATUS     0x145  // 325  - ESP_status (brake, stability)
 #define CAN_ID_GTW_EPAS_CTRL  0x101  // 257  - GTW_epasControl (steering tune WRITE, Chassis CAN)
-#define CAN_ID_DAS_STATUS     0x39B  // 923  - DAS_status (AP state, nag, lane change, blind spot)
+#define CAN_ID_DAS_STATUS     0x39B  // 923  - DAS_status (HW4 + Highland HW3; AP state, nag, lane change, blind spot)
+#define CAN_ID_DAS_STATUS_HW3 0x399  // 921  - DAS_status (pre-Highland HW3 / Legacy, same ID as HW4 ISA chime — HW-dependent meaning)
 #define CAN_ID_DAS_STATUS2    0x389  // 905  - DAS_status2 (ACC report, driver interaction)
 #define CAN_ID_DAS_SETTINGS   0x293  // 659  - DAS_settings (autosteer enable, steering weight, etc.)
 #define CAN_ID_DAS_AP_CONFIG  0x331  // 817  - DAS autopilot config (tier restore target, ~1 Hz)
@@ -285,7 +286,11 @@ void fsd_build_steering_tune_frame(CANFRAME* frame, uint8_t mode);
 /** Parse DAS_status (0x39B) — AP hands-on state, lane change, blind spot,
  *  FCW, vision speed limit. All Party CAN, read-only.
  *  Source: opendbc tesla_model3_party.dbc. */
-void fsd_handle_das_status(FSDState* state, const CANFRAME* frame);
+/** HW4 / Highland HW3 DAS_status parser (0x39B, party CAN layout). */
+void fsd_handle_das_status_hw4(FSDState* state, const CANFRAME* frame);
+/** Pre-Highland HW3 / Legacy DAS_status parser (0x399, legacy CAN layout).
+ *  Same frame ID as HW4 ISA_SPEED — caller dispatches by HW version. */
+void fsd_handle_das_status_hw3(FSDState* state, const CANFRAME* frame);
 
 /** Parse DAS_status2 (0x389) — ACC report, activation failure.
  *  Source: opendbc tesla_model3_party.dbc. */

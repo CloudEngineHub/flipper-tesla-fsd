@@ -387,10 +387,29 @@ void fsd_build_steering_tune_frame(CANFRAME* frame, uint8_t mode) {
     frame->buffer[0] = (mode & 0x07) << 2;
 }
 
-// --- DAS_status (0x39B) parser: AP state, blind spot, FCW, speed limit ---
-// opendbc tesla_model3_party.dbc — all little-endian
+// --- DAS_status parser: AP state, blind spot, FCW, speed limit ---
+//
+// HW-dependent CAN ID + byte layout:
+//   Pre-Highland HW3 / Legacy: 0x399 (legacy CAN map per opendbc/tesla_can.dbc)
+//   Highland HW3 / HW4:        0x39B (party CAN map per opendbc/tesla_model3_party.dbc)
+//
+// HW3 layout (0x399, legacy):
+//   byte 0 low nibble = DAS_autopilotState   (2=available, 3=engaged)
+//   byte 5 bits[5:2]  = DAS_handsOnState     (matches HW4 position)
+//
+// HW4 layout (0x39B, party): full multi-signal parser below.
+//
+// v2.14 silently broke pre-Highland HW3 users by reading 0x39B only.
+// Caller dispatches by hw_version in scenes/fsd_running.c.
 
-void fsd_handle_das_status(FSDState* state, const CANFRAME* frame) {
+void fsd_handle_das_status_hw3(FSDState* state, const CANFRAME* frame) {
+    if(frame->data_lenght < 6) return;
+    state->das_ap_state = frame->buffer[0] & 0x0Fu;
+    state->das_hands_on_state = (frame->buffer[5] >> 2) & 0x0Fu;
+    state->das_seen = true;
+}
+
+void fsd_handle_das_status_hw4(FSDState* state, const CANFRAME* frame) {
     if(frame->data_lenght < 7) return;
     // DAS_autopilotState: bit12|4 → byte1 bits[7:4]
     // 0=UNAVAIL 1=AVAIL 2=ACTIVE_NOMINAL 3=ACTIVE_MIN_DRIVER ...
@@ -734,7 +753,7 @@ void fsd_handle_das_steering(FSDState* state, const CANFRAME* frame) {
 // Improved from ev-open-can-tools PR #5 (zdenekbouresh):
 //
 // 1. DAS-aware gating: only echo when DAS_autopilotHandsOnState (from
-//    0x39B, already parsed in fsd_handle_das_status) indicates the car
+//    0x39B/0x399, already parsed in fsd_handle_das_status_hw3/hw4) indicates the car
 //    is actually demanding hands-on. States 0 (NOT_REQD) and 8
 //    (SUSPENDED) mean DAS is satisfied — no echo needed. This reduces
 //    spurious bus traffic from ~25 frames/sec to near-zero during normal
@@ -774,7 +793,8 @@ bool fsd_handle_nag_killer(FSDState* state, const CANFRAME* frame, CANFRAME* out
     if(hands_on == 1) return false;
 
     // DAS-aware gating: skip echo when DAS is satisfied or AP suspended.
-    // das_hands_on_state is parsed from 0x39B in fsd_handle_das_status().
+    // das_hands_on_state is parsed from 0x39B (HW4) or 0x399 (HW3) in
+    // fsd_handle_das_status_hw4 / fsd_handle_das_status_hw3.
     // 0 = NOT_REQD (satisfied), 8 = SUSPENDED (AP paused).
     // 0xFF = no DAS frame seen yet — echo conservatively as fallback.
     uint8_t das = state->das_hands_on_state;

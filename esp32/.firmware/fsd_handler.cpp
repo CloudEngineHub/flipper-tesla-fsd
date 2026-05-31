@@ -57,6 +57,8 @@ void fsd_state_init(FSDState *state, TeslaHWVersion hw) {
     state->force_fsd            = false;
     state->china_mode           = false;
     state->bms_output           = false;
+    // 14.x warning default ON — most affected users don't know their firmware version
+    state->firmware_14x_warning = true;
 #if defined(BOARD_TTGO_DISPLAY)
     state->display_enabled      = true;
     state->display_brightness   = 50;

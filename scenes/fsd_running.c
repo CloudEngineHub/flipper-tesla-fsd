@@ -72,9 +72,14 @@ static void fsd_update_display(TeslaFSDApp* app, uint32_t uptime_ms) {
     widget_add_string_element(
         app->widget, 2, 36, AlignLeft, AlignTop, FontSecondary, line3);
 
-    // Line 4: live BMS readout if we've seen any BMS frames, else feature flags
+    // Line 4: 14.x firmware warning takes priority, then BMS, then feature flags.
+    // 2026.14.x added an enforcement check that disables autosteer the moment any
+    // CAN injection touches 0x3FD. Warning is opt-out via the "On 14.x" toggle
+    // for users who know they're on pre-14.x firmware.
     char line4[48];
-    if(state.bms_seen) {
+    if(app->firmware_14x_warning) {
+        snprintf(line4, sizeof(line4), "!14.x: TX may stop AP");
+    } else if(state.bms_seen) {
         float kw = state.pack_voltage_v * state.pack_current_a / 1000.0f;
         snprintf(line4, sizeof(line4), "SoC:%.0f%% %.0fkW %d-%dC",
             (double)state.soc_percent, (double)kw,

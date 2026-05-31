@@ -88,6 +88,13 @@ struct FSDState {
     bool           tlssc_restore;
     uint32_t       tlssc_restore_count;
 
+    // ── 2026.14.x firmware warning ───────────────────────────────────────────
+    // Default ON. When ON, the web dashboard shows a banner reminding the user
+    // that TX features (0x3FD bit46/60 inject) will immediately disable
+    // autosteer on 2026.14.x. Users on pre-14.x firmware can disable it.
+    // Persisted in NVS so the choice carries across deep sleep / reboot.
+    bool           firmware_14x_warning;
+
     // ── DAS status — nag killer gating ───────────────────────────────────────
     // Legacy/HW3 source: 0x399. HW4 source: 0x39B.
     // 0=NOT_REQD, 8=SUSPENDED — both mean DAS is satisfied, skip echo.

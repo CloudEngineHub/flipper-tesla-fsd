@@ -64,6 +64,8 @@ typedef struct FSDState {
     float torsion_bar_torque_nm; // from 0x370 EPAS3S_torsionBarTorque
     bool torsion_bar_torque_seen;
     bool driver_brake_applied;   // from 0x145 ESP_driverBrakeApply
+    bool brake_status_seen;      // true once a 0x145 ESP_status frame is parsed
+                                 // (lets the continuous-AP brake interlock fail closed)
     bool speed_seen;             // true once we've parsed at least one 0x257
     uint32_t last_speed_tick_ms; // ms clock when the last 0x257 was seen (TX interlock freshness)
 

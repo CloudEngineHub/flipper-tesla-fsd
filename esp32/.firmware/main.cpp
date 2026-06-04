@@ -595,6 +595,16 @@ static bool continuous_ap_brake_recent(uint32_t now, const FSDState &s) {
 }
 
 static bool continuous_ap_brake_allows(uint32_t now, const FSDState &s) {
+    // Fail closed: the brake kill switch reads 0x145 (ESP_status). Until at least
+    // one 0x145 frame is seen we cannot prove the pedal is released, so refuse to
+    // engage rather than silently dropping the interlock on a bus without 0x145.
+    if (!s.brake_status_seen) {
+        if (g_cont_ap_state != ContAp_Idle) {
+            Serial.println("[CONT-AP] brake status (0x145) not seen; refusing to engage");
+            continuous_ap_reset("brake status unseen");
+        }
+        return false;
+    }
     if (!continuous_ap_brake_recent(now, s)) return true;
 
     if (g_cont_ap_state != ContAp_Idle) {
@@ -1044,6 +1054,15 @@ static void process_frame(CanBusId bus, const CanFrame &frame) {
         fsd_handle_das_status_hw4(&g_state, &frame);
         state_exit();
         return;
+    }
+    // HW4 trims that never broadcast 0x39B carry the hands-on field on 0x399
+    // (same byte5[5:2]); read it as a fallback so the nag gate isn't starved (#100).
+    // Read-only and non-returning — the ISA chime-suppress path still handles 0x399.
+    if (hw_uses_hw4_das_status(das_state.hw_version) &&
+        frame.id == CAN_ID_DAS_STATUS_HW3 && !das_state.das_hw4_status_seen) {
+        state_enter();
+        fsd_handle_das_handsonly_399(&g_state, &frame);
+        state_exit();
     }
 
     // ── Continuous AP HW3/Legacy state parsers (read-only, always) ──────────

@@ -1,4 +1,4 @@
-## Unreleased — EPAS-faithful nag rewritten as a demand-state (Mode-C) machine + capture during Active
+## 2.16-beta.8 — EPAS-faithful nag rewritten as a demand-state (Mode-C) machine + capture during Active (testing build)
 
 - **EPAS-faithful nag mode rewritten (#100).** beta.7's first attempt (a flat torque walk with handsOnLevel left at 0) was too naive and @ssw0209-sys confirmed it didn't hold. The mode is now a demand-state machine ported from the in-the-wild "Mode C" reference (surfaced by @ssw0209-sys), which works on 2026.14.x:
   - **handsOnLevel is derived from the synthetic torque magnitude** (|t|≥2 Nm → 2, ≥1 Nm → 1, else 0) so the frame is internally consistent — instead of forcing it (legacy killer) or pinning it to 0 (beta.7).
@@ -7,6 +7,8 @@
   - Still behind the **"Nag EPAS-faithful"** toggle, **off by default**, both builds. Host-tested (248 assertions: AP-state gate, state-2 delay+band, state-3 ramp, handsOnLevel-from-magnitude, counter+1, checksum). **Experimental — needs on-car validation.** Note: the nag killer only works on the bus that carries `0x370` (Chassis CAN on most harnesses, *not* Vehicle CAN — see HARDWARE.md); tapping the wrong pair means there's nothing to echo.
   - ⚠️ Same safety note as below: test only in a safe, empty area, hands ready.
 - **Web-stream CAN capture now works in Active mode (#108).** The capture previously recorded only in Listen-Only, so it stopped the instant you hit Activate — making the steer-jerk transient (which only happens during injection) impossible to record (@dunckencn). Multi-ID captures now record in both modes; the single-ID hardware filter stays Listen-Only-only so injection's RX path is never starved.
+- **HARDWARE.md: X179 13/14 relabelled Chassis CAN (#100/#114).** Per @jewelrylin's Service Mode CAN Port map (harness `1933903-XX`), pin 13/14 is Chassis CAN, not "Bus 6" — which is why `0x370 EPAS3P` is there (EPAS lives on Chassis). `0x370` is **not** on Vehicle CAN (9/10), so the nag killer only works on the pair your car's Service Mode page labels Chassis. The pin→bus map varies by harness (≥4 configs) — Service Mode is the deterministic check.
+- **Safety note corrected (@DrStrangeglovebox).** The forced-disengagement / tripped-efuse behaviour was seen only on FSD v13, not v14, and the fuses reset on their own after the car sleeps ~20 min — no service required. Less severe than beta.7's note said; still test only in a safe, empty area, hands ready.
 - Thanks: @ssw0209-sys (the Mode-C reference + the honest negative beta.7 result), @dunckencn (the capture-during-Active need), @jewelrylin / @DrStrangeglovebox / @0xAccretion (the bus + DAS-layout data underpinning all of this).
 
 ## 2.16-beta.7 — TWAI bus-off recovery + HW-detect guard + experimental EPAS-faithful nag (testing build)

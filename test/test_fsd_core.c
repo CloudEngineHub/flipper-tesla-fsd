@@ -21,6 +21,7 @@
 #include "fsd_can_ops.h"
 #include "fsd_capture.h"
 #include "fsd_checksum.h"
+#include "fsd_events.h"
 #include "fsd_handler.h"
 #include "fsd_profile.h"
 
@@ -562,6 +563,82 @@ static void test_abort_guard(void) {
     CANFRAME f; zero(&f); f.canId = 0x3EE; f.data_lenght = 8;
     CHECK(fsd_handle_legacy_autopilot(&h, &f, 5000u) == false,
           "legacy autopilot suppressed while abort latched");
+}
+
+// ── fsd-events shared event-core (#123) ──────────────────────────────────────
+static void test_fsd_events(void) {
+    FSDState s;
+    memset(&s, 0, sizeof(s));
+
+    // Cold start (das_ap_state 0): first poll just seeds the baseline, no event.
+    CHECK(fsd_events_poll(&s, 0u) == EVT_NONE, "cold poll: no event");
+
+    // Engage 0->6 (UNAVAIL->active) is not a reported transition.
+    s.das_ap_state = 6;
+    CHECK(fsd_events_poll(&s, 100u) == EVT_NONE, "engage to active: no event");
+    CHECK(fsd_events_poll(&s, 200u) == EVT_NONE, "steady active: no event");
+
+    // 6 -> 8 (ABORTING): EVT_ABORT, carrying from/to + timestamp.
+    s.das_ap_state = DAS_APSTATE_ABORTING;
+    CHECK(fsd_events_poll(&s, 1000u) == EVT_ABORT, "6->8: abort fires");
+    CHECK(s.evt_last_from == 6 && s.evt_last_to == 8, "abort carries 6->8");
+    CHECK(s.evt_last_ms == 1000u, "abort carries timestamp");
+
+    // 8 -> 9 (ABORTING->ABORTED): still inside the abort, no re-fire.
+    s.das_ap_state = DAS_APSTATE_ABORTED;
+    CHECK(fsd_events_poll(&s, 1100u) == EVT_NONE, "8->9: no re-fire within abort");
+
+    // 9 -> 1 (abort resolves to disengaged): disengage uses its own cooldown
+    // slot, so it fires even though the abort cooldown is still active.
+    s.das_ap_state = 1;
+    CHECK(fsd_events_poll(&s, 1200u) == EVT_DISENGAGE, "9->1: disengage fires");
+    CHECK(s.evt_last_from == 9 && s.evt_last_to == 1, "disengage carries 9->1");
+
+    // 6 -> 9 path also fires a single abort.
+    memset(&s, 0, sizeof(s));
+    s.das_ap_state = 6; fsd_events_poll(&s, 0u);
+    s.das_ap_state = DAS_APSTATE_ABORTED;
+    CHECK(fsd_events_poll(&s, 10u) == EVT_ABORT, "6->9: abort fires");
+
+    // Clean disengage 6 -> 1 (no abort first).
+    memset(&s, 0, sizeof(s));
+    s.das_ap_state = 6; fsd_events_poll(&s, 0u);
+    s.das_ap_state = 1;
+    CHECK(fsd_events_poll(&s, 10u) == EVT_DISENGAGE, "6->1: clean disengage fires");
+    CHECK(s.evt_last_from == 6 && s.evt_last_to == 1, "disengage carries 6->1");
+
+    // Cooldown: a flapping abort does not re-emit within FSD_EVENT_COOLDOWN_MS,
+    // then re-arms once the window passes.
+    memset(&s, 0, sizeof(s));
+    s.das_ap_state = 6; fsd_events_poll(&s, 0u);
+    s.das_ap_state = 8;
+    CHECK(fsd_events_poll(&s, 1000u) == EVT_ABORT, "abort #1 fires");
+    s.das_ap_state = 6; fsd_events_poll(&s, 1500u);          // leave abort: no event
+    s.das_ap_state = 8;
+    CHECK(fsd_events_poll(&s, 2000u) == EVT_NONE, "abort #2 within cooldown suppressed");
+    s.das_ap_state = 6; fsd_events_poll(&s, 1000u + FSD_EVENT_COOLDOWN_MS + 1u);
+    s.das_ap_state = 8;
+    CHECK(fsd_events_poll(&s, 1000u + FSD_EVENT_COOLDOWN_MS + 2u) == EVT_ABORT,
+          "abort re-arms after cooldown");
+
+    // Injected MANUAL respects its own cooldown and re-arms after the window.
+    memset(&s, 0, sizeof(s));
+    CHECK(fsd_events_inject(&s, EVT_MANUAL, 0u) == EVT_MANUAL, "manual #1 fires");
+    CHECK(fsd_events_inject(&s, EVT_MANUAL, 5000u) == EVT_NONE,
+          "manual within cooldown suppressed");
+    CHECK(fsd_events_inject(&s, EVT_MANUAL, FSD_EVENT_COOLDOWN_MS + 1u) == EVT_MANUAL,
+          "manual re-arms after cooldown");
+
+    // Injected BUSOFF has an independent cooldown slot from MANUAL.
+    CHECK(fsd_events_inject(&s, EVT_BUSOFF, FSD_EVENT_COOLDOWN_MS + 2u) == EVT_BUSOFF,
+          "busoff fires independent of manual cooldown");
+    CHECK(fsd_events_inject(&s, EVT_BUSOFF, FSD_EVENT_COOLDOWN_MS + 100u) == EVT_NONE,
+          "busoff within its own cooldown suppressed");
+
+    // inject only accepts caller-sourced types — detection-only / none are rejected.
+    CHECK(fsd_events_inject(&s, EVT_ABORT, 999999u) == EVT_NONE, "inject rejects EVT_ABORT");
+    CHECK(fsd_events_inject(&s, EVT_DISENGAGE, 999999u) == EVT_NONE, "inject rejects EVT_DISENGAGE");
+    CHECK(fsd_events_inject(&s, EVT_NONE, 999999u) == EVT_NONE, "inject rejects EVT_NONE");
 }
 
 // ── nag burst/pause + ±1.8 Nm torque cap (#122) ──────────────────────────────
@@ -1392,6 +1469,7 @@ int main(void) {
     test_nag_burst_cap();
     test_signal_config();
     test_abort_guard();
+    test_fsd_events();
     test_can_ops();
     test_additive_checksum();
     test_candump_format();

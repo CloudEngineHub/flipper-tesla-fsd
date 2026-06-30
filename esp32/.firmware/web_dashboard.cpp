@@ -12,6 +12,7 @@
 #include "web_dashboard.h"
 #include "can_dump.h"
 #include "http_can_stream.h"
+#include "blackbox.h"
 #include "prefs.h"
 #include <WebServer.h>
 #include <WebSocketsServer.h>
@@ -510,6 +511,35 @@ R"rawliteral(
 </details>
 </div>
 
+<!-- Black-box incident recorder (#124) -->
+<div class="card">
+  <div class="card-head"><div class="icon ic-d">R</div><h2>Black-box</h2>
+    <span id="bbBadge" class="pill on" style="display:none;margin-left:auto">NEW</span></div>
+  <div id="bbNote" class="log-info" style="margin-bottom:10px;display:none">
+    Records full-rate CAN around anomalies (aborts, bus-off, manual marks) to the
+    device only &mdash; never uploaded. Use the toggle below to enable or disable.
+    <button type="button" onclick="bbDismiss()" style="margin-left:6px;background:var(--card2);border:1px solid var(--border);color:var(--text);padding:2px 8px;border-radius:4px;cursor:pointer">Got it</button>
+  </div>
+  <div class="row">
+    <span class="lbl">Auto-record</span>
+    <label class="sw"><input type="checkbox" id="swBlackbox" onchange="cmd('blackbox_enable',this.checked)"><span class="sl2"></span></label>
+  </div>
+  <div class="row">
+    <span class="lbl">Status</span>
+    <span class="pill off" id="bbSt"><span class="pd"></span>Idle</span>
+  </div>
+  <div class="row">
+    <span class="lbl">Storage</span>
+    <span id="bbStore" style="font-size:.78em;color:var(--text2)">--</span>
+  </div>
+  <div id="bbVolatileWarn" class="log-info" style="display:none;margin:8px 0;color:var(--yellow)">
+    &#9888;&#xFE0F; Volatile storage &mdash; download events before power-off; they are lost on reboot.
+  </div>
+  <button id="bbMark" type="button" class="btn-main btn-blue" onclick="cmd('blackbox_mark',true)" style="margin:8px 0">&#9873; MARK NOW</button>
+  <div id="bbList" style="margin-top:4px"></div>
+  <button id="bbDelAll" type="button" class="btn-main btn-stop" onclick="bbDeleteAll()" style="margin-top:10px;display:none">DELETE ALL EVENTS</button>
+</div>
+
 <!-- Administration -->
 <details class="config-section">
   <summary><div class="icon ic-c">A</div><div class="card-head" style="margin:0"><h2>Administration</h2></div></summary>
@@ -708,6 +738,47 @@ function updateControlsSummary(d){
   e.textContent=items.length?items.join(', '):'Expand to setup';
   e.title=e.textContent;
 }
+// ── Black-box incident recorder (#124) ──
+var bbCaptures=-1,bbNew=false,bbNoteDismissed=false;
+try{bbNoteDismissed=localStorage.getItem('bbNote')==='1'}catch(e){}
+function bbEsc(s){return String(s==null?'':s).replace(/[<>&"]/g,function(c){return{'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]})}
+function bbDismiss(){bbNoteDismissed=true;try{localStorage.setItem('bbNote','1')}catch(e){}var n=document.getElementById('bbNote');if(n)n.style.display='none';}
+function bbSeen(){bbNew=false;var bd=document.getElementById('bbBadge');if(bd)bd.style.display='none';}
+function bbSync(d){
+  var b=d.blackbox;if(!b)return;
+  var sw=document.getElementById('swBlackbox');if(sw&&sw!==document.activeElement)sw.checked=!!b.enabled;
+  pill('bbSt',b.enabled,b.armed?'Capturing':(b.enabled?'Armed':'Off'));
+  var st=document.getElementById('bbStore');
+  if(st)st.textContent=(b.backend||'?')+' · '+(b.psram?'PSRAM':'internal')+' · '+((b.cap||0).toLocaleString())+' frames · '+(b.events||0)+' saved';
+  var vw=document.getElementById('bbVolatileWarn');if(vw)vw.style.display=b.volatile?'block':'none';
+  var note=document.getElementById('bbNote');if(note)note.style.display=bbNoteDismissed?'none':'block';
+  var da=document.getElementById('bbDelAll');if(da)da.style.display=(b.events>0)?'block':'none';
+  if(bbCaptures<0){bbCaptures=b.captures;bbRefreshList();}
+  else if(b.captures!==bbCaptures){bbCaptures=b.captures;bbNew=true;bbRefreshList();}
+  var bd=document.getElementById('bbBadge');if(bd)bd.style.display=bbNew?'inline-block':'none';
+}
+function bbRefreshList(){
+  fetch('/blackbox/list').then(function(r){return r.json()}).then(function(a){
+    var el=document.getElementById('bbList');if(!el)return;
+    if(!a||!a.length){el.innerHTML='<div style="font-size:.78em;color:var(--text3);padding:6px 0">No events recorded yet.</div>';return;}
+    a.sort(function(x,y){return (y.name||'').localeCompare(x.name||'')});
+    var h='';
+    a.forEach(function(ev){
+      var s=ev.summary||{},nm=encodeURIComponent(ev.name);
+      h+='<div style="border-top:1px solid var(--border);padding:8px 0">';
+      h+='<div style="font-size:.8em;color:var(--text);font-family:monospace">'+bbEsc(s.detail||s.trigger||'event')+'</div>';
+      h+='<div style="font-size:.72em;color:var(--text3);margin:2px 0">'+bbEsc(s.hw||'')+' · '+(s.frames||0)+' frames · '+bbEsc((s.buses&&s.buses.dual_can)?'dual-CAN':'single')+'</div>';
+      h+='<div style="display:flex;gap:6px;margin-top:4px">';
+      h+='<a class="btn-main btn-blue" style="padding:4px 10px;font-size:.7em;flex:0" href="/blackbox/get?name='+nm+'&type=log" onclick="bbSeen()">.log</a>';
+      h+='<a class="btn-main btn-blue" style="padding:4px 10px;font-size:.7em;flex:0" href="/blackbox/get?name='+nm+'&type=json" onclick="bbSeen()">.json</a>';
+      h+='<button type="button" class="btn-main btn-stop" style="padding:4px 10px;font-size:.7em" onclick="bbDelete(\''+bbEsc(ev.name)+'\')">del</button>';
+      h+='</div></div>';
+    });
+    el.innerHTML=h;
+  }).catch(function(){});
+}
+function bbDelete(n){cmd('blackbox_delete',n);setTimeout(bbRefreshList,400);}
+function bbDeleteAll(){if(confirm('Delete all recorded events from the device?')){cmd('blackbox_delete_all',true);bbSeen();setTimeout(bbRefreshList,400);}}
 function ring(p){
   var b=document.getElementById('socBar');
   b.style.strokeDashoffset=CIRC-(CIRC*Math.min(p,100)/100);
@@ -780,6 +851,7 @@ function upd(d){
     document.getElementById('numSleep').value=Math.floor((d.sleep_ms||0)/1000);
 
   updateControlsSummary(d);
+  bbSync(d);
   pill('dumpSt',d.can_dump,d.can_dump?'Recording':'Idle');
 
   // CAN stats
@@ -1328,6 +1400,7 @@ static String build_json() {
     j += "\"uptime_s\":";      j += uptime_s;                          j += ',';
     j += "\"fw_build\":\"";    j += __DATE__;  j += ' '; j += __TIME__; j += "\",";
     j += "\"can_dump\":";      j += can_dump_active()                 ? "true" : "false"; j += ',';
+    j += "\"blackbox\":";      j += blackbox_status_json();            j += ',';
     j += "\"sleep_ms\":";     j += state.sleep_idle_ms;               j += ',';
     j += "\"wifi_ssid\":\"";  j += json_escape(state.wifi_ssid);      j += "\",";
     j += "\"wifi_pass\":\"";  j += state.wifi_pass[0] ? "***" : "";  j += "\",";
@@ -1527,6 +1600,34 @@ static void ws_event(uint8_t num, WStype_t type,
                               (uint16_t)v[7], v[8], v[9]);
                 prefs_save(&saved);
             }
+        }
+    } else if (strstr(buf, "\"blackbox_enable\"")) {
+        if (vptr) {
+            while (*vptr == ' ' || *vptr == ':') vptr++;
+            bool enabled = (strncmp(vptr, "true", 4) == 0);
+            blackbox_set_enabled(enabled);          // locks the state mux itself
+            FSDState saved;
+            state_enter();
+            saved = *g_state;
+            state_exit();
+            Serial.printf("[Web] Black-box: %s\n", enabled ? "ON" : "OFF");
+            prefs_save(&saved);
+        }
+    } else if (strstr(buf, "\"blackbox_mark\"")) {
+        blackbox_mark(millis());                    // inject EVT_MANUAL + arm
+        Serial.println("[Web] Black-box: manual mark");
+    } else if (strstr(buf, "\"blackbox_delete_all\"")) {
+        blackbox_delete_all();
+        Serial.println("[Web] Black-box: delete all");
+    } else if (strstr(buf, "\"blackbox_delete\"")) {
+        const char *v = strstr(buf, "\"value\":\"");
+        if (v) {
+            v += 9;
+            char name[40];
+            size_t i = 0;
+            while (v[i] && v[i] != '\"' && i < sizeof(name) - 1) { name[i] = v[i]; i++; }
+            name[i] = '\0';
+            if (name[0]) { blackbox_delete(name); Serial.printf("[Web] Black-box: delete %s\n", name); }
         }
     }
 #if defined(BOARD_TTGO_DISPLAY)
@@ -1781,6 +1882,34 @@ static void handle_sdformat() {
     g_http.send(200, "application/json", result);
 }
 
+// ── Black-box (#124) ──────────────────────────────────────────────────────────
+static void handle_blackbox_list() {
+    g_http.sendHeader("Cache-Control", "no-store");
+    g_http.send(200, "application/json", blackbox_list_json());
+}
+
+static void handle_blackbox_get() {
+    String name = g_http.arg("name");
+    bool json = (g_http.arg("type") == "json");
+    if (name.length() == 0 || name.length() >= 40) {
+        g_http.send(400, "text/plain", "bad name");
+        return;
+    }
+    size_t size = 0;
+    if (!blackbox_file_size(name.c_str(), json, &size)) {
+        g_http.send(404, "text/plain", "no such event");
+        return;
+    }
+    String fname = name + (json ? ".json" : ".log");
+    g_http.setContentLength(size);
+    g_http.sendHeader("Content-Disposition", "attachment; filename=\"" + fname + "\"");
+    g_http.sendHeader("Cache-Control", "no-store");
+    g_http.send(200, json ? "application/json" : "text/plain", "");
+    WiFiClient client = g_http.client();
+    blackbox_stream_body(client, name.c_str(), json);
+    client.flush();
+}
+
 static void handle_restart() {
     if (!require_admin_auth()) return;
     g_http.send(200, "text/plain", "OK");
@@ -1948,6 +2077,8 @@ void web_dashboard_init(FSDState *state,
     g_http.on("/api/status", HTTP_GET,  handle_status);
     g_http.on("/auth",       HTTP_GET,  handle_auth);
     g_http.on("/sdformat",   HTTP_GET,  handle_sdformat);
+    g_http.on("/blackbox/list", HTTP_GET, handle_blackbox_list);
+    g_http.on("/blackbox/get",  HTTP_GET, handle_blackbox_get);
     g_http.on("/restart",    HTTP_GET,  handle_restart);
     g_http.on("/update",     HTTP_POST, handle_ota_done, handle_ota_upload);
     g_http.begin();

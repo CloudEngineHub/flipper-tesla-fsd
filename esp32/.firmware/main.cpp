@@ -27,6 +27,8 @@
 #include "web_dashboard.h"
 #include "can_dump.h"
 #include "http_can_stream.h"
+#include "blackbox.h"
+#include "../../fsd_logic/fsd_events.h"
 #include "prefs.h"
 #if defined(BOARD_TTGO_DISPLAY)
 #include "display.h"
@@ -1041,6 +1043,7 @@ static void update_led() {
 
 // ── CAN frame dispatcher ──────────────────────────────────────────────────────
 static void process_frame(CanBusId bus, const CanFrame &frame) {
+    uint32_t now = millis();
     state_enter();
     g_state.rx_count++;
     // Configurable signal mapping (#122): when set, read DAS/steering from the
@@ -1055,6 +1058,12 @@ static void process_frame(CanBusId bus, const CanFrame &frame) {
         g_state.soft_engage_latched = false;  // re-require centred wheel next engage (#108)
     }
     fsd_abort_guard_update(&g_state);  // latch off injection if the car aborts (#108)
+    // Black-box event-core poll (#124): once per frame, reading das_ap_state as
+    // of the last DAS parse (same vantage as abort_guard above). Detects the
+    // abort transition; the snapshot carries the toggles for the .json summary.
+    blackbox_note_ap_state(g_state.das_ap_state, now);
+    FSDEventType bb_evt = fsd_events_poll(&g_state, now);
+    FSDState bb_snap = g_state;
     if (frame.id == CAN_ID_GTW_CAR_STATE)  g_state.seen_gtw_car_state++;
     if (frame.id == CAN_ID_GTW_CAR_CONFIG) g_state.seen_gtw_car_config++;
     if (frame.id == CAN_ID_AP_CONTROL)     g_state.seen_ap_control++;
@@ -1062,6 +1071,12 @@ static void process_frame(CanBusId bus, const CanFrame &frame) {
     if (frame.id == CAN_ID_BMS_SOC)        g_state.seen_bms_soc++;
     if (frame.id == CAN_ID_BMS_THERMAL)    g_state.seen_bms_thermal++;
     state_exit();
+
+    // Black-box: record every frame (all ids/buses, both modes) and arm a
+    // capture on an abort transition (#124). Never triggers on a plain
+    // disengage — only EVT_ABORT here; bus-off/manual arm from elsewhere.
+    blackbox_record(bus, frame, now);
+    if (bb_evt == EVT_ABORT) blackbox_arm(BB_TRIG_ABORT, &bb_snap, now);
 
     can_dump_record(bus, frame);
     // Record to the web stream in BOTH modes so a capture can run *through* an
@@ -1449,6 +1464,7 @@ void setup() {
     g_state.force_fsd             = false;
     g_state.china_mode            = false;
     g_state.bms_output            = false;
+    g_state.blackbox_enabled      = BLACKBOX_DEFAULT_ENABLED;  // ON on LittleFS/SD, OFF on volatile RAM (#124)
 
     prefs_load(&g_state);
 #if defined(BOARD_TTGO_DISPLAY)
@@ -1470,6 +1486,7 @@ void setup() {
     led_set(LED_BLUE);
 
     can_dump_init();
+    blackbox_init(&g_state, &g_state_mux);  // ring + storage (after SD is mounted)
 
 #if defined(BOARD_LILYGO)
     {
@@ -1549,6 +1566,8 @@ void loop() {
         }
         // Recover a bus-off controller so RX resumes without a manual toggle (#108).
         g_can[i]->serviceHealth();
+        // Bus-off just fired → arm a black-box capture via the event-core (#124).
+        if (g_can[i]->busOffEvent()) blackbox_busoff(now);
     }
 
     // ── Periodic error counter refresh (~every 250 ms) ────────────────────────
@@ -1653,6 +1672,7 @@ void loop() {
     }
 
     can_dump_tick(now);
+    blackbox_tick(now);  // post-roll countdown + flush (#124)
 
 #if defined(BOARD_LILYGO)
     sleep_tick(now);

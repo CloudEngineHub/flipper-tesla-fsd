@@ -19,6 +19,7 @@
 #include <string.h>
 
 #include "fsd_can_ops.h"
+#include "fsd_blackbox_summary.h"
 #include "fsd_capture.h"
 #include "fsd_checksum.h"
 #include "fsd_events.h"
@@ -639,6 +640,62 @@ static void test_fsd_events(void) {
     CHECK(fsd_events_inject(&s, EVT_ABORT, 999999u) == EVT_NONE, "inject rejects EVT_ABORT");
     CHECK(fsd_events_inject(&s, EVT_DISENGAGE, 999999u) == EVT_NONE, "inject rejects EVT_DISENGAGE");
     CHECK(fsd_events_inject(&s, EVT_NONE, 999999u) == EVT_NONE, "inject rejects EVT_NONE");
+}
+
+// ── black-box .json summary formatter (#124) ─────────────────────────────────
+static void test_blackbox_summary(void) {
+    uint32_t tl_ts[3]    = {0u, 4200u, 4670u};
+    uint8_t  tl_state[3] = {2u, 6u, 9u};
+    FSDBlackboxSummary s;
+    memset(&s, 0, sizeof(s));
+    s.trigger        = "ABORT";
+    s.from_state     = 6;
+    s.to_state       = 9;
+    s.trigger_rel_ms = 4670u;
+    s.window_pre_ms  = 10000u;
+    s.window_post_ms = 5000u;
+    s.frame_count    = 12345u;
+    s.hw_version     = 3;            // HW4
+    s.hw4_das_status_seen = true;
+    s.dual_can       = true;
+    s.bus0_frames    = 8000u;
+    s.bus1_frames    = 4345u;
+    s.nag            = true;
+    s.abort_guard    = true;
+    s.tl_ts          = tl_ts;
+    s.tl_state       = tl_state;
+    s.tl_count       = 3;
+
+    char out[512];
+    int n = fsd_blackbox_format_json(out, sizeof(out), &s);
+    CHECK(n > 0 && n == (int)strlen(out), "summary returns written length");
+    CHECK(strstr(out, "\"trigger\":\"ABORT\"") != NULL, "trigger present");
+    CHECK(strstr(out, "\"transition\":\"6->9\"") != NULL, "transition 6->9");
+    CHECK(strstr(out, "ABORT 6->9 @ t=4.670s") != NULL, "human detail with rel time");
+    CHECK(strstr(out, "\"hw\":\"HW4\"") != NULL, "hw name HW4");
+    CHECK(strstr(out, "\"dual_can\":true") != NULL, "dual_can flag");
+    CHECK(strstr(out, "\"can0\":8000") != NULL, "can0 frame count");
+    CHECK(strstr(out, "\"nag\":true") != NULL, "nag toggle");
+    CHECK(strstr(out, "\"abort_guard\":true") != NULL, "abort_guard toggle");
+    CHECK(strstr(out, "\"signal_map\":false") != NULL, "signal_map off");
+    CHECK(strstr(out, "{\"t\":4670,\"s\":9}") != NULL, "timeline tail entry");
+    CHECK(strstr(out, "\"frames\":12345") != NULL, "frame count");
+
+    // Manual mark: from==to, empty timeline still yields valid JSON.
+    memset(&s, 0, sizeof(s));
+    s.trigger = "MANUAL";
+    s.from_state = s.to_state = 2;
+    n = fsd_blackbox_format_json(out, sizeof(out), &s);
+    CHECK(n > 0, "manual summary non-empty");
+    CHECK(strstr(out, "\"transition\":\"2->2\"") != NULL, "manual transition 2->2");
+    CHECK(strstr(out, "\"ap_timeline\":[]") != NULL, "empty timeline");
+    CHECK(out[strlen(out) - 1] == '}', "well-terminated JSON");
+
+    // Truncation safety: a tiny buffer must stay NUL-terminated and in-bounds.
+    char tiny[16];
+    n = fsd_blackbox_format_json(tiny, sizeof(tiny), &s);
+    CHECK(n < (int)sizeof(tiny), "tiny buffer not overrun");
+    CHECK(tiny[n] == '\0', "tiny buffer NUL-terminated");
 }
 
 // ── nag burst/pause + ±1.8 Nm torque cap (#122) ──────────────────────────────
@@ -1470,6 +1527,7 @@ int main(void) {
     test_signal_config();
     test_abort_guard();
     test_fsd_events();
+    test_blackbox_summary();
     test_can_ops();
     test_additive_checksum();
     test_candump_format();

@@ -274,6 +274,10 @@ typedef struct FSDState {
     // 2026.14.x firmware warning (persisted in NVS on ESP32)
     bool firmware_14x_warning;
 
+    // Black-box incident recorder (#124, persisted in NVS on ESP32). Default ON.
+    // Auto-records full-rate CAN around aborts / bus-off / manual marks.
+    bool blackbox_enabled;
+
     // DAS_status fields parsed by the ESP32 handler
     uint8_t das_speed_limit_1;
     uint8_t das_speed_limit_2;

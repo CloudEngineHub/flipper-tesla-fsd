@@ -209,6 +209,198 @@ static void test_ota_tx_gate(void) {
     CHECK(fsd_can_transmit(&s), "Active after release -> TX allowed");
 }
 
+// ── HW4/HW3 DAS decode: byte0 low nibble (#177) + autopark bits (#180) ────────
+static void esp32_das(FSDState* s, uint8_t b0, uint8_t b1, uint8_t b3,
+                      void (*fn)(FSDState*, const CanFrame*)) {
+    CanFrame f;
+    memset(&f, 0, sizeof(f));
+    f.id = 0x39B; f.dlc = 8;
+    f.data[0] = b0; f.data[1] = b1; f.data[3] = b3;
+    f.data[5] = (uint8_t)(2u << 2);  // hands-on 2 (valid, keeps das_seen meaningful)
+    fn(s, &f);
+}
+
+static void test_das_decode(void) {
+    FSDState s;
+
+    // Real anoblekman Highland HW4 frames: ap_state from byte0, byte1 = 0x0A noise.
+    memset(&s, 0, sizeof(s));
+    esp32_das(&s, 0x01, 0x0A, 0xE0, fsd_handle_das_status_hw4);   // parked, no bits
+    CHECK(s.das_ap_state == 1, "hw4 parked byte0 ap_state=1 got %u", s.das_ap_state);
+    CHECK(!s.ap_active, "hw4 state 1 -> ap_active false");
+    CHECK(!s.autopark_ready && !s.autopark_waiting_brake, "byte3 0xE0 -> no autopark bits");
+
+    esp32_das(&s, 0x06, 0x0A, 0xE5, fsd_handle_das_status_hw4);   // autopark, byte3 0xE5
+    CHECK(s.das_ap_state == 6, "hw4 autopark byte0 ap_state=6 got %u", s.das_ap_state);
+    CHECK(s.ap_active, "hw4 state 6 -> ap_active true (engaged 3..6)");
+    CHECK(s.autopark_ready && s.autopark_waiting_brake && !s.autopark_parked,
+          "byte3 0xE5 -> ready+waitingForBrake");
+
+    // #116 fixtures decode to their byte0 states; byte1 noise never changes it.
+    memset(&s, 0, sizeof(s));
+    esp32_das(&s, 0x02, 0x10, 0x00, fsd_handle_das_status_hw4);
+    CHECK(s.das_ap_state == 2, "#116 READY byte0=2 got %u", s.das_ap_state);
+    static const uint8_t noise[] = {0x6A, 0x10, 0x0A, 0xF0};
+    for (unsigned i = 0; i < sizeof(noise); i++) {
+        esp32_das(&s, 0x03, noise[i], 0x00, fsd_handle_das_status_hw4);
+        CHECK(s.das_ap_state == 3, "byte1=0x%02X noise keeps ap_state=3 got %u",
+              noise[i], s.das_ap_state);
+    }
+
+    // HW3 0x399 parser: same byte0 decode + engaged 3..6 (not == 3).
+    memset(&s, 0, sizeof(s));
+    esp32_das(&s, 0x06, 0x00, 0x00, fsd_handle_das_status_hw3);
+    CHECK(s.das_ap_state == 6 && s.ap_active, "hw3 state 6 -> ap_active (engaged, not ==3)");
+    esp32_das(&s, 0x02, 0x00, 0x00, fsd_handle_das_status_hw3);
+    CHECK(s.das_ap_state == 2 && !s.ap_active, "hw3 AVAILABLE(2) -> not active");
+}
+
+// ── engaged helper (shared) ───────────────────────────────────────────────────
+static void test_engaged(void) {
+    for (uint8_t v = 0; v <= 15; v++) {
+        bool exp = (v >= 3 && v <= 6);
+        CHECK(fsd_das_state_engaged(v) == exp, "engaged(%u) exp %d", v, exp);
+    }
+}
+
+// ── in-car Autopark pause (#180) ──────────────────────────────────────────────
+static void ap_update(FSDState* s, uint8_t st, uint32_t now) {
+    s->das_ap_state = st;
+    fsd_autopark_update(s, now);
+}
+// Feed one 0x257 DI_speed frame through the ESP32 parser, stamp freshness the way
+// main.cpp does, then run the Autopark update at the same instant.
+static void ap_speed(FSDState* s, uint8_t b1, uint8_t b2, uint32_t now) {
+    CanFrame f;
+    memset(&f, 0, sizeof(f));
+    f.id = 0x257u; f.dlc = 8;
+    f.data[1] = b1; f.data[2] = b2;
+    fsd_handle_di_speed(s, &f);
+    s->last_speed_tick_ms = now;
+    fsd_autopark_update(s, now);
+}
+static void test_autopark(void) {
+    FSDState s;
+
+    // Autopark sequence: blocks during the state-6 episode, releases after.
+    memset(&s, 0, sizeof(s));
+    s.op_mode = OpMode_Active;
+    ap_update(&s, 1, 100);
+    CHECK(!s.autopark_tx_block && fsd_can_transmit(&s), "parked: no block");
+    s.autopark_ready = true; s.autopark_waiting_brake = true;
+    ap_update(&s, 6, 1200);
+    CHECK(s.autopark_episode && s.autopark_tx_block, "state 6 autopark: blocked");
+    CHECK(!fsd_can_transmit(&s), "autopark blocks fsd_can_transmit");
+    s.autopark_ready = false; s.autopark_waiting_brake = false;
+    ap_update(&s, 1, 22000);
+    CHECK(!s.autopark_episode && fsd_can_transmit(&s), "6->1: released");
+
+    // FSD 2->3->6 with bits clear never blocks.
+    memset(&s, 0, sizeof(s));
+    s.op_mode = OpMode_Active;
+    ap_update(&s, 2, 100); ap_update(&s, 3, 200); ap_update(&s, 6, 300);
+    CHECK(!s.autopark_tx_block && fsd_can_transmit(&s), "FSD 2->3->6: no block");
+
+    // 2->6 (missed 3) at 0 km/h blocks; fresh speed >20 releases; stale keeps block.
+    memset(&s, 0, sizeof(s));
+    s.op_mode = OpMode_Active;
+    s.speed_seen = true; s.last_speed_tick_ms = 100; s.vehicle_speed_kph = 0.0f;
+    ap_update(&s, 2, 100); ap_update(&s, 6, 200);
+    CHECK(s.autopark_tx_block, "2->6 missed-3 at 0 km/h: blocked");
+    s.vehicle_speed_kph = 25.0f; s.last_speed_tick_ms = 900;
+    ap_update(&s, 6, 1000);
+    CHECK(!s.autopark_tx_block, "fresh speed >20 releases");
+    s.last_speed_tick_ms = 1000;  // stale relative to now
+    ap_update(&s, 6, 3200);
+    CHECK(s.autopark_tx_block, "stale speed keeps block (fail safe)");
+
+    // SNA speed must NOT release: raw 0xFFF (4095) decodes to 287.6 kph.
+    memset(&s, 0, sizeof(s));
+    s.op_mode = OpMode_Active;
+    s.autopark_ready = true;
+    ap_update(&s, 1, 100); ap_update(&s, 6, 200);
+    CHECK(s.autopark_tx_block, "SNA test: episode blocked before any speed");
+    ap_speed(&s, 0xF0, 0xFF, 300);                    // raw 0xFFF = SNA, fresh
+    CHECK(s.vehicle_speed_kph > 287.5f && s.vehicle_speed_kph < 287.7f,
+          "SNA raw 0xFFF decodes to %.2f kph (287.6)", s.vehicle_speed_kph);
+    CHECK(s.autopark_tx_block && !fsd_can_transmit(&s), "fresh SNA speed keeps the block");
+    ap_speed(&s, 0xD0, 0x32, 400);                    // raw 813 = 25.04 kph, fresh
+    CHECK(!s.autopark_tx_block && fsd_can_transmit(&s), "fresh valid 25 kph releases");
+    ap_speed(&s, 0xF0, 0xFF, 500);                    // back to SNA
+    CHECK(s.autopark_episode && s.autopark_tx_block, "back to SNA re-blocks mid-episode");
+    ap_speed(&s, 0xE0, 0xFD, 600);                    // raw 4062 = 284.96, max valid
+    CHECK(!s.autopark_tx_block, "raw 4062 (max valid 284.96 kph) releases");
+    ap_speed(&s, 0xF0, 0xFD, 700);                    // raw 4063 = 285.04, invalid
+    CHECK(s.autopark_tx_block, "raw 4063 (above max valid) keeps the block");
+
+    // autopark bit rising mid-episode at low speed blocks.
+    memset(&s, 0, sizeof(s));
+    s.op_mode = OpMode_Active;
+    ap_update(&s, 3, 100); ap_update(&s, 6, 200);
+    CHECK(!s.autopark_tx_block, "FSD 3->6 no bits: no block");
+    s.autopark_parked = true; ap_update(&s, 6, 300);
+    CHECK(s.autopark_tx_block, "bit rising mid-6: blocks");
+
+    // ignore_ota does NOT override; listen-only still blocks.
+    memset(&s, 0, sizeof(s));
+    s.op_mode = OpMode_Active;
+    s.ignore_ota = true; s.autopark_ready = true;
+    ap_update(&s, 6, 200);
+    CHECK(s.autopark_tx_block && !fsd_can_transmit(&s), "ignore_ota does not override autopark");
+    s.op_mode = OpMode_ListenOnly;
+    CHECK(!fsd_can_transmit(&s), "listen-only blocks TX");
+}
+
+// ── Signal Map hardening (#100): mask-0 ignored + configured-but-absent flag ──
+static void test_signal_map(void) {
+    FSDState s;
+
+    // Mask 0 means "not mapped": the field is ignored, not forced to 0.
+    memset(&s, 0, sizeof(s));
+    s.hw_version = TeslaHW_HW4;
+    s.das_ap_state = 5; s.das_hands_on_state = 3; s.ap_active = true;
+    s.cfg_das_id = 0x39B;
+    s.cfg_apstate_byte = 0; s.cfg_apstate_shift = 0; s.cfg_apstate_mask = 0x00;
+    s.cfg_handson_byte = 5; s.cfg_handson_shift = 2; s.cfg_handson_mask = 0x00;
+    CanFrame f;
+    memset(&f, 0, sizeof(f));
+    f.id = 0x39B; f.dlc = 8; f.data[0] = 0x02; f.data[5] = (uint8_t)(1u << 2);
+    fsd_apply_signal_config(&s, &f, 5000u);
+    CHECK(s.das_ap_state == 5, "mask-0 apstate ignored (kept 5, got %u)", s.das_ap_state);
+    CHECK(s.das_hands_on_state == 3, "mask-0 hands-on ignored (kept 3, got %u)", s.das_hands_on_state);
+    CHECK(s.das_ctx_seen_ms == 5000u, "mask-0 still stamps freshness");
+    // A real mask maps normally + syncs ap_active via the engaged helper.
+    s.cfg_apstate_mask = 0x0F;
+    f.data[0] = 0x06;
+    fsd_apply_signal_config(&s, &f, 5100u);
+    CHECK(s.das_ap_state == 6 && s.ap_active, "mapped mask reads byte0 + ap_active engaged");
+
+    // Configured-but-absent DAS id raises the flag after the timeout, clears on sight.
+    memset(&s, 0, sizeof(s));
+    s.cfg_das_id = 0x39B;
+    CHECK(!fsd_signal_map_das_missing(&s, 1000u), "within boot grace -> not missing");
+    CHECK(fsd_signal_map_das_missing(&s, 4000u), "never seen after timeout -> missing");
+    s.das_ctx_seen_ms = 4000u;
+    CHECK(!fsd_signal_map_das_missing(&s, 4500u), "id shows up -> clears");
+    CHECK(fsd_signal_map_das_missing(&s, 8000u), "stale again -> missing");
+    s.cfg_das_id = 0;
+    CHECK(!fsd_signal_map_das_missing(&s, 8000u), "auto mode -> never missing");
+}
+
+// ── DI_speed decode parity with the Flipper (0x257) ───────────────────────────
+static void test_di_speed(void) {
+    FSDState s;
+    memset(&s, 0, sizeof(s));
+    CanFrame f;
+    memset(&f, 0, sizeof(f));
+    f.id = 0x257u; f.dlc = 8;   // DI_speed (the handler ignores the id)
+    f.data[1] = 0x10; f.data[2] = 0x27; f.data[3] = 0x42;
+    fsd_handle_di_speed(&s, &f);   // raw = (0x27<<4)|(0x10>>4) = 625 -> 625*0.08-40 = 10.0
+    CHECK(s.vehicle_speed_kph > 9.99f && s.vehicle_speed_kph < 10.01f,
+          "di_speed got %.3f exp 10.0", s.vehicle_speed_kph);
+    CHECK(s.ui_speed == 0x42 && s.speed_seen, "di_speed ui_speed + speed_seen");
+}
+
 // ── state init ────────────────────────────────────────────────────────────────
 static void test_state_init(void) {
     FSDState s;
@@ -225,6 +417,11 @@ int main() {
     test_gtw_car_state();
     test_ota_parity();
     test_ota_tx_gate();
+    test_das_decode();
+    test_engaged();
+    test_autopark();
+    test_signal_map();
+    test_di_speed();
     test_state_init();
 
     printf("\n%d passed, %d failed\n", g_pass, g_fail);

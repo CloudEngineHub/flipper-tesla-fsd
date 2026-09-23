@@ -330,6 +330,16 @@ input:checked+.sl2:before{transform:translateX(20px);background:#fff}
 <!-- OTA Warning -->
 <div id="otaBanner" class="ota">&#9888;&#xFE0F; OTA UPDATE IN PROGRESS &mdash; CAN TX SUSPENDED</div>
 
+<!-- Autopark Warning (#180) -->
+<div id="autoparkBanner" class="ota">&#9888;&#xFE0F; IN-CAR AUTOPARK &mdash; CAN TX PAUSED</div>
+
+<!-- Signal Map watchdog (#100) -->
+<div id="sigmapWarn" class="warn14x"><div class="w-row"><div class="w-msg">
+  <strong>&#9888;&#xFE0F; Signal Map DAS id not seen on this bus.</strong>
+  The configured DAS id isn't arriving, so AP-state can't be read and the nag
+  killer is paused. Set <b>DAS id 0</b> for auto, or fix the mapping / tap.
+</div></div></div>
+
 <!-- 2026.14.x Firmware Warning -->
 <div id="warn14x" class="warn14x">
   <div class="w-row">
@@ -977,6 +987,14 @@ function upd(d){
     if(d.ota) otaB.innerHTML=d.ignore_ota?'&#9888;&#xFE0F; OTA UPDATE IN PROGRESS &mdash; TX ALLOWED BY IGNORE OTA':'&#9888;&#xFE0F; OTA UPDATE IN PROGRESS &mdash; CAN TX SUSPENDED';
   }
 
+  // Autopark banner (#180) — TX paused during an in-car Autopark episode
+  var apB=document.getElementById('autoparkBanner');
+  if(apB) apB.style.display=d.autopark_block?'block':'none';
+
+  // Signal Map watchdog banner (#100)
+  var smW=document.getElementById('sigmapWarn');
+  if(smW) smW.style.display=d.signal_map_das_missing?'block':'none';
+
   // 14.x firmware warning banner
   var w14x=document.getElementById('warn14x');
   if(w14x) w14x.style.display=d.firmware_14x_warning?'block':'none';
@@ -1587,6 +1605,8 @@ static String build_json() {
     j += "\"hw_override\":";   j += (int)state.hw_override;            j += ',';
     j += "\"hw_version\":";    j += (int)state.hw_version;             j += ',';
     j += "\"ota\":";           j += state.tesla_ota_in_progress        ? "true" : "false"; j += ',';
+    j += "\"autopark_block\":"; j += state.autopark_tx_block            ? "true" : "false"; j += ',';
+    j += "\"signal_map_das_missing\":"; j += state.signal_map_das_missing ? "true" : "false"; j += ',';
     j += "\"ap_das_profile\":\""; j += ap_das_profile;                 j += "\",";
     j += "\"isa_speed_enabled\":"; j += isa_speed_enabled              ? "true" : "false"; j += ',';
     j += "\"ignore_ota\":";    j += state.ignore_ota                   ? "true" : "false"; j += ',';

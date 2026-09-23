@@ -999,6 +999,7 @@ static void button_tick() {
         if (g_factory_reset_armed) {
             Serial.println("[BTN] Factory reset confirmed — clearing NVS");
             prefs_clear();
+            can_shutdown_all(g_can, CAN_ACTIVE_BUS_COUNT);
             delay(200);
             ESP.restart();
         }

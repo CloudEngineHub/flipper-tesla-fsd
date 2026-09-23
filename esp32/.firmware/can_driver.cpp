@@ -193,6 +193,19 @@ public:
             Serial.printf("[CAN] %s TWAI hardware filter -> accept all\n", label_);
         }
     }
+
+    // Pre-reboot quiesce: stop the controller (no TX, no ACK), then take the TX
+    // pad back from the TWAI peripheral and drive it recessive until the chip
+    // resets. The level is latched high before the pad becomes an output (and
+    // set again after) so the handover itself can't blip dominant on the bus.
+    void shutdown() override {
+        stop_and_uninstall();
+        if (tx_pin_ >= 0) {
+            digitalWrite((uint8_t)tx_pin_, HIGH);
+            pinMode((uint8_t)tx_pin_, OUTPUT);
+            digitalWrite((uint8_t)tx_pin_, HIGH);
+        }
+    }
 };
 #endif
 
@@ -395,6 +408,16 @@ public:
             Serial.printf("[CAN] %s MCP2515 hardware filter -> accept all\n", label_);
         }
     }
+
+    // Pre-reboot quiesce: CONFIG mode takes the MCP2515 off the bus (no TX, no
+    // ACK), and it stays there across the ESP32 reset until begin() runs again.
+    // If the mode request doesn't take (e.g. a frame stuck pending TX), the SPI
+    // RESET instruction forces the chip into CONFIG mode.
+    void shutdown() override {
+        if (!chip_detected_) return;  // nothing answering on SPI
+        if (mcp_.setConfigMode() != MCP2515::ERROR_OK) mcp_.reset();
+        installed_ = false;
+    }
 };
 #endif
 
@@ -422,6 +445,13 @@ CanDriver *can_driver_create(CanBusId bus) {
     (void)bus;
     return can_driver_create();
 #endif
+}
+
+void can_shutdown_all(CanDriver **buses, uint8_t count) {
+    for (uint8_t i = 0; i < count; i++) {
+        if (buses[i]) buses[i]->shutdown();
+    }
+    Serial.println("[CAN] Controllers stopped — bus released for restart");
 }
 
 #if !defined(CAN_DRIVER_TWAI) && !defined(CAN_DRIVER_MCP2515) && !defined(CAN_DRIVER_T2CAN_DUAL)

@@ -26,7 +26,7 @@
 
 // ── Module state ──────────────────────────────────────────────────────────────
 static FSDState  *g_state = nullptr;   // shared with main
-static CanDriver **g_can_buses = nullptr; // for setListenOnly()
+static CanDriver **g_can_buses = nullptr; // mode switch + pre-reboot quiesce
 static uint8_t g_can_count = 0;
 static portMUX_TYPE *g_state_mux = nullptr;
 
@@ -2284,6 +2284,7 @@ static void ws_event(uint8_t num, WStype_t type,
             Serial.printf("[Web] WiFi config: AP=\"%s\" STA=\"%s\" PASS=*** HIDDEN=%d\n",
                 saved.wifi_ssid, saved.wifi_sta_ssid, saved.wifi_hidden);
             prefs_save(&saved);
+            can_shutdown_all(g_can_buses, g_can_count);
             delay(500);
             ESP.restart();
         }
@@ -2371,6 +2372,7 @@ static void handle_blackbox_get() {
 static void handle_restart() {
     if (!require_admin_auth()) return;
     g_http.send(200, "text/plain", "OK");
+    can_shutdown_all(g_can_buses, g_can_count);
     delay(500);
     ESP.restart();
 }
@@ -2513,6 +2515,7 @@ static void handle_ota_done() {
     Serial.println("[OTA] Firmware update successful!");
     Serial.println("[OTA] Rebooting in 2 seconds...");
 
+    can_shutdown_all(g_can_buses, g_can_count);
     delay(2000);
     ESP.restart();
 }

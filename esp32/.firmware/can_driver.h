@@ -74,6 +74,9 @@ public:
      *  Deactivate/Activate toggle. No-op while the bus is healthy. */
     virtual void serviceHealth() {}
 
+    /** Stop TX/ACK and release the bus before a reboot. Default no-op. */
+    virtual void shutdown() {}
+
     virtual ~CanDriver() = default;
 };
 
@@ -84,3 +87,7 @@ CanDriver *can_driver_create();
 /** Factory function for boards with two active CAN controllers.
  *  Caller owns the returned pointer. */
 CanDriver *can_driver_create(CanBusId bus);
+
+/** Quiesce every non-null driver (shutdown()) right before ESP.restart(),
+ *  so no controller is still transmitting or ACKing when the chip resets. */
+void can_shutdown_all(CanDriver **buses, uint8_t count);

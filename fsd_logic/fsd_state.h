@@ -294,10 +294,12 @@ typedef struct FSDState {
     bool ignore_ota;             // allow TX while Tesla OTA is detected
     bool china_mode;             // bypass FSD UI selection check for China vehicles
 
-    // OTA detection debounce (from 0x318)
+    // OTA detection debounce (from 0x318) — used by both builds via fsd_ota.h
     uint8_t ota_raw_state;       // raw GTW_updateInProgress bits [1:0]
     uint8_t ota_assert_count;    // consecutive "in-progress" samples
     uint8_t ota_clear_count;     // consecutive "not in-progress" samples
+    uint8_t ota_last_byte6;      // previous 0x318 byte6 (flag vs rolling counter)
+    bool ota_last_valid;         // ota_last_byte6 holds a real sample
 
     // per-ID seen counters (wiring/diagnostics)
     uint32_t seen_gtw_car_state; // 0x318

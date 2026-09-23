@@ -165,6 +165,18 @@ public:
         return info.rx_missed_count;
     }
 
+    uint32_t busErrorCount() override {
+        twai_status_info_t info;
+        if (twai_get_status_info(&info) != ESP_OK) return 0;
+        return info.bus_error_count;
+    }
+
+    uint32_t txFailedCount() override {
+        twai_status_info_t info;
+        if (twai_get_status_info(&info) != ESP_OK) return 0;
+        return info.tx_failed_count;
+    }
+
     void setListenOnly(bool enable) override {
 #ifdef SNIFFER_ONLY
         (void)enable;   // sniffer build is permanently Listen-Only; ignore mode switches
@@ -368,6 +380,11 @@ public:
 
     // rxMissedCount(): use the CanDriver default (0). The MCP2515 overflow flag
     // would need an extra SPI read on the hot path, so it is not surfaced here.
+    // busErrorCount(): default 0 too; the chip only exposes live TEC/REC levels,
+    // not a cumulative bus-error count.
+
+    // Every errorCount() event is a sendMessage() failure.
+    uint32_t txFailedCount() override { return err_count_; }
 
     void setListenOnly(bool enable) override {
         if (!installed_ || listen_only_ == enable) return;
@@ -445,6 +462,17 @@ CanDriver *can_driver_create(CanBusId bus) {
     (void)bus;
     return can_driver_create();
 #endif
+}
+
+CanErrorSplit can_error_split(CanDriver **buses, uint8_t count) {
+    CanErrorSplit s = {};
+    for (uint8_t i = 0; i < count; i++) {
+        if (!buses[i]) continue;
+        s.rx_missed_count += buses[i]->rxMissedCount();
+        s.bus_error_count += buses[i]->busErrorCount();
+        s.tx_failed_count += buses[i]->txFailedCount();
+    }
+    return s;
 }
 
 void can_shutdown_all(CanDriver **buses, uint8_t count) {

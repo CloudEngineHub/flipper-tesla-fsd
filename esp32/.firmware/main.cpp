@@ -999,6 +999,7 @@ static void button_tick() {
         if (g_factory_reset_armed) {
             Serial.println("[BTN] Factory reset confirmed — clearing NVS");
             prefs_clear();
+            can_shutdown_all(g_can, CAN_ACTIVE_BUS_COUNT);
             delay(200);
             ESP.restart();
         }
@@ -1729,9 +1730,12 @@ void loop() {
             (s.hw_version == TeslaHW_HW4)    ? "HW4"    :
             (s.hw_version == TeslaHW_HW3)    ? "HW3"    :
             (s.hw_version == TeslaHW_Legacy)  ? "Legacy" : "?";
+        // CANErr is the combined count; mostly controller RX-queue drops on a
+        // busy bus, so print the per-cause split beside it.
+        CanErrorSplit err = can_error_split(g_can, CAN_ACTIVE_BUS_COUNT);
         Serial.printf(
             "[STA] HW:%-6s AP:%-4s FSD_UI:%-4s Unlock:%-3s NAG:%-3s Echo:%lu OTA:%-3s "
-            "Profile:%d  RX:%lu TX:%lu Mod:%lu Err:%lu\n",
+            "Profile:%d  RX:%lu TX:%lu Mod:%lu CANErr:%lu (RXmissed:%lu Bus:%lu TXfail:%lu)\n",
             hw_str,
             s.ap_active       ? "ON"         : "wait",
             s.fsd_enabled     ? "ON"         : "wait",
@@ -1743,7 +1747,10 @@ void loop() {
             (unsigned long)s.rx_count,
             (unsigned long)s.tx_count,
             (unsigned long)s.frames_modified,
-            (unsigned long)s.crc_err_count);
+            (unsigned long)s.crc_err_count,
+            (unsigned long)err.rx_missed_count,
+            (unsigned long)err.bus_error_count,
+            (unsigned long)err.tx_failed_count);
         last_status_ms = now;
     }
 

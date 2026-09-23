@@ -1264,21 +1264,154 @@ static void test_candump_format(void) {
 }
 
 // ── 0x318 GTW_carState OTA detection (gates TX) ───────────────────────────────
+static void gtw_feed(FSDState* s, uint8_t b6) {
+    CANFRAME f;
+    zero(&f);
+    f.canId = CAN_ID_GTW_CAR_STATE;
+    f.data_lenght = 8;
+    f.buffer[6] = b6;
+    fsd_handle_gtw_car_state(s, &f);
+}
+
+// Feed a byte6 sequence; true if the OTA pause latched at any point.
+static bool gtw_feed_seq(FSDState* s, const uint8_t* b6, int n) {
+    bool latched = false;
+    for (int i = 0; i < n; i++) {
+        gtw_feed(s, b6[i]);
+        if (s->tesla_ota_in_progress) latched = true;
+    }
+    return latched;
+}
+
 static void test_gtw_car_state(void) {
     FSDState s;
     memset(&s, 0, sizeof(s));
     CANFRAME f;
     zero(&f);
-    f.data_lenght = 7;
-    f.buffer[6] = 2; // installing
+    f.data_lenght = 6; // short frame: ignored, not even the reference byte
+    f.buffer[6] = 0x42;
     fsd_handle_gtw_car_state(&s, &f);
-    CHECK(s.tesla_ota_in_progress, "OTA installing(2) -> in_progress");
-    f.buffer[6] = 1; // available — must NOT pause TX (issue #19 false positive)
-    fsd_handle_gtw_car_state(&s, &f);
-    CHECK(!s.tesla_ota_in_progress, "OTA available(1) -> not in_progress");
-    f.buffer[6] = 0;
-    fsd_handle_gtw_car_state(&s, &f);
-    CHECK(!s.tesla_ota_in_progress, "OTA none(0) -> not in_progress");
+    CHECK(!s.ota_last_valid && s.ota_clear_count == 0, "OTA dlc<7 frame ignored");
+
+    // One raw-2 frame no longer pauses TX: it only seeds the reference byte.
+    gtw_feed(&s, 0x02);
+    CHECK(s.ota_raw_state == 2, "OTA raw_state 2 got %u", s.ota_raw_state);
+    CHECK(!s.tesla_ota_in_progress, "OTA single raw-2 frame -> not in_progress");
+
+    // Stable raw 0/1/3 never latch (raw 1 false-positived in #19).
+    static const uint8_t other[] = {0x01, 0x00, 0x03};
+    for (size_t k = 0; k < sizeof(other); k++) {
+        uint8_t seq[10];
+        memset(seq, other[k], sizeof(seq));
+        memset(&s, 0, sizeof(s));
+        CHECK(!gtw_feed_seq(&s, seq, (int)sizeof(seq)), "OTA stable raw %u never latches",
+              other[k]);
+    }
+
+    // Stable flag 0x42: frame 1 seeds the reference, each repeat is an asserting
+    // sample -> latches on the 3rd repeat (4th frame), not the 2nd.
+    memset(&s, 0, sizeof(s));
+    s.op_mode = OpMode_Active;
+    for (int i = 1; i <= 3; i++) {
+        gtw_feed(&s, 0x42);
+        CHECK(!s.tesla_ota_in_progress, "OTA stable 0x42 frame %d -> not yet", i);
+    }
+    CHECK(s.ota_assert_count == 2, "OTA 2 repeats -> assert_count 2 got %u", s.ota_assert_count);
+    gtw_feed(&s, 0x42);
+    CHECK(s.tesla_ota_in_progress, "OTA stable 0x42 latches on 3rd repeat (frame 4)");
+    CHECK(!fsd_can_transmit(&s), "OTA latched -> TX blocked");
+
+    // Latched: a stable non-2 byte releases on exactly the 6th frame.
+    for (int i = 1; i <= 5; i++) {
+        gtw_feed(&s, 0x41);
+        CHECK(s.tesla_ota_in_progress, "OTA clear frame %d -> still latched", i);
+    }
+    gtw_feed(&s, 0x41);
+    CHECK(!s.tesla_ota_in_progress, "OTA releases on 6th non-asserting frame");
+    CHECK(fsd_can_transmit(&s), "OTA released -> TX allowed");
+
+    // A raw-2 frame whose byte6 differs from the previous one resets the count.
+    memset(&s, 0, sizeof(s));
+    gtw_feed(&s, 0x42);
+    gtw_feed(&s, 0x42);
+    gtw_feed(&s, 0x42);
+    CHECK(s.ota_assert_count == 2, "OTA pre-reset assert_count 2 got %u", s.ota_assert_count);
+    gtw_feed(&s, 0x46); // raw 2, byte6 changed
+    CHECK(s.ota_assert_count == 0, "OTA changed raw-2 byte6 resets assert_count got %u",
+          s.ota_assert_count);
+    gtw_feed(&s, 0x46);
+    gtw_feed(&s, 0x46);
+    CHECK(!s.tesla_ota_in_progress, "OTA 2 repeats after reset -> not yet");
+    gtw_feed(&s, 0x46);
+    CHECK(s.tesla_ota_in_progress, "OTA 3 repeats after reset -> latched");
+}
+
+// 0x318 byte6 on current cars is a rolling counter (+2, always odd), so
+// bits[1:0] alternate 1/3 and RX drops can alias it; none of it may latch (#183).
+// Real capture, Model S Palladium 2022, consecutive received frames (decimated):
+static const uint8_t k_palladium_318_b6[] = {
+    0x47, 0x4B, 0x4D, 0x53, 0x45, 0x4F, 0x5D, 0x4B, 0x5F, 0x49, 0x53, 0x5B, 0x43, 0x4B, 0x5B,
+    0x43, 0x5F, 0x53, 0x4F, 0x4D, 0x57, 0x41, 0x5F, 0x5B, 0x4D, 0x5D, 0x49, 0x53, 0x4F,
+};
+
+static uint32_t xorshift32(uint32_t* x) {
+    *x ^= *x << 13;
+    *x ^= *x >> 17;
+    *x ^= *x << 5;
+    return *x;
+}
+
+static void test_gtw_car_state_counter(void) {
+    FSDState s;
+    memset(&s, 0, sizeof(s));
+    CHECK(!gtw_feed_seq(&s, k_palladium_318_b6, (int)sizeof(k_palladium_318_b6)),
+          "OTA Palladium byte6 capture never latches");
+
+    // +2 counter 0x21..0x3F (16 steps), keeping every k-th frame: k=2 pins
+    // bits[1:0] at 1, k=16 aliases to a constant 0x21.
+    static const int keep_every[] = {1, 2, 3, 16};
+    for (size_t k = 0; k < sizeof(keep_every) / sizeof(keep_every[0]); k++) {
+        uint8_t seq[128];
+        for (int i = 0; i < (int)sizeof(seq); i++)
+            seq[i] = (uint8_t)(0x21 + 2 * ((i * keep_every[k]) % 16));
+        memset(&s, 0, sizeof(s));
+        CHECK(!gtw_feed_seq(&s, seq, (int)sizeof(seq)), "OTA +2 counter keep 1/%d never latches",
+              keep_every[k]);
+    }
+
+    // +2 counter under pseudo-random RX drops (fixed seed), keeping ~1/4..3/4.
+    for (int keep_q = 1; keep_q <= 3; keep_q++) {
+        uint32_t rng = 0x31800u + (uint32_t)keep_q;
+        uint8_t seq[256];
+        int n = 0;
+        for (int i = 0; n < (int)sizeof(seq); i++)
+            if ((int)(xorshift32(&rng) & 3u) < keep_q) seq[n++] = (uint8_t)(0x21 + 2 * (i % 16));
+        memset(&s, 0, sizeof(s));
+        CHECK(!gtw_feed_seq(&s, seq, n), "OTA +2 counter random drops keep %d/4 never latches",
+              keep_q);
+    }
+
+    // +1 counter 0x00..0xFF kept every 4th frame: phase 2 reads a constant raw 2,
+    // but byte6 changes every frame, so it is never an asserting sample.
+    for (int phase = 0; phase < 4; phase++) {
+        uint8_t seq[128];
+        for (int i = 0; i < (int)sizeof(seq); i++)
+            seq[i] = (uint8_t)(phase + 4 * i);
+        memset(&s, 0, sizeof(s));
+        CHECK(!gtw_feed_seq(&s, seq, (int)sizeof(seq)),
+              "OTA +1 counter every 4th (phase %d) never latches", phase);
+    }
+
+    // Nor can that aliased raw-2 counter hold a latch: it releases on frame 6.
+    memset(&s, 0, sizeof(s));
+    for (int i = 0; i < 4; i++)
+        gtw_feed(&s, 0x42);
+    CHECK(s.tesla_ota_in_progress, "OTA latched before counter");
+    for (int i = 1; i <= 5; i++)
+        gtw_feed(&s, (uint8_t)(0x02 + 4 * i));
+    CHECK(s.tesla_ota_in_progress, "OTA raw-2 counter frame 5 -> still latched");
+    gtw_feed(&s, (uint8_t)(0x02 + 4 * 6));
+    CHECK(!s.tesla_ota_in_progress, "OTA raw-2 counter releases on frame 6");
 }
 
 // ── 0x045 Legacy stalk + 0x3EE Legacy autopilot ───────────────────────────────
@@ -2247,6 +2380,7 @@ int main(void) {
     test_additive_checksum();
     test_candump_format();
     test_gtw_car_state();
+    test_gtw_car_state_counter();
     test_legacy();
     test_esp_status();
     test_das_status();

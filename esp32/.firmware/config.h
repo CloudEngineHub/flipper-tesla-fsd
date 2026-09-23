@@ -154,13 +154,8 @@
 #define CONT_AP_STALK_STOP_RECENT_MS     750u
 #define CONT_AP_MAX_RETRIES                 3u
 
-// OTA detection hardening on GTW_carState (0x318)
-// Some firmware versions keep non-zero states when no update is actively running.
-// We only treat one specific raw value as "update in progress" and require
-// consecutive-frame confirmation to avoid false positives.
-#define OTA_IN_PROGRESS_RAW_VALUE  1u
-#define OTA_ASSERT_FRAMES          3u
-#define OTA_CLEAR_FRAMES           6u
+// OTA detection on GTW_carState (0x318): debounce thresholds are shared with the
+// Flipper in fsd_logic/fsd_ota.h.
 
 #if defined(BOARD_LILYGO)
   #define ME2107_EN 16

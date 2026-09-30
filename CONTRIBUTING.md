@@ -18,6 +18,16 @@ ufbt
 The output `.fap` lands in `dist/`. If you need the full firmware SDK
 instead of `ufbt`, see the [ufbt docs](https://github.com/flipperdevices/flipperzero-ufbt).
 
+Run the host tests too. CI runs them first and won't build the `.fap` or
+the ESP32 images if they fail:
+
+```bash
+make -C test check
+```
+
+ESP32 changes: `cd esp32 && pio run -e <env>` (the envs are in
+`esp32/platformio.ini`).
+
 ### Step 2 — Test in Listen-Only mode first
 
 Since v2.4 the app boots in **Listen-Only** mode. The MCP2515 is put into
@@ -63,8 +73,9 @@ thread. Match the style of the surrounding file. Concretely:
   unlock immediately, work on a stack copy in the worker
 - Bounds-check every byte access against `frame->data_lenght` (yes,
   `data_lenght`, that's the upstream MCP2515 lib spelling — don't fix it)
-- Add new CAN ID `#define`s to `fsd_logic/fsd_handler.h` with the decimal
-  value and a one-line comment
+- Add new CAN ID `#define`s to `fsd_logic/fsd_handler.h` (Flipper / shared
+  core) and `esp32/.firmware/config.h` (ESP32) with the decimal value and a
+  one-line comment
 
 ## Branching
 

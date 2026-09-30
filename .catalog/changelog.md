@@ -1,5 +1,6 @@
 ## v2.16.1
 
+- HW4 speed profile is written to the right bits again. The old write cleared the frame's valid flag, which stopped the speed offset from working.
 - OTA detection no longer mistakes the rolling counter in 0x318 for an update in progress, which could silently stop all transmitting on newer cars.
 - HW4 Autopilot state is read from the documented DBC position, and all injection pauses while the car runs in-car Autopark.
 - Signal Map presets for cars with a non-standard DAS layout.

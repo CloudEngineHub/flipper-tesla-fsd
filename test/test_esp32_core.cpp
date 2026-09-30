@@ -15,6 +15,7 @@
 
 #include "fsd_handler.h"  // esp32/.firmware/fsd_handler.h (first on the include path)
 #include "fsd_ota.h"      // shared reference: fsd_ota_update()
+#include "fsd_can_ops.h"  // tesla_can_rx_accept / tesla_can_tx_valid (driver RX/TX filter)
 
 static int g_pass = 0;
 static int g_fail = 0;
@@ -610,6 +611,32 @@ static void test_hw4_mux2_profile_layout(void) {
     }
 }
 
+// ── driver RX/TX frame filter ─────────────────────────────────────────────────
+// The TWAI driver hands up DLC 9..15 unchanged (twai_message_t.data is 8 bytes)
+// plus extended and remote frames. receive() drops DLC > 8; process_frame()
+// records extended / remote frames to captures but tesla_can_rx_accept() keeps
+// them away from every parser and handler.
+static void test_can_frame_filter(void) {
+    // Standard data frames the handlers use are accepted, DLC 0..8.
+    CHECK(tesla_can_rx_accept(0x3FDu, false, false, 8), "0x3FD dlc8 accepted");
+    CHECK(tesla_can_rx_accept(0x000u, false, false, 0), "id0 dlc0 accepted");
+    CHECK(tesla_can_rx_accept(0x7FFu, false, false, 8), "max std id accepted");
+    // DLC 9..15 is "8 bytes" on the wire but would overflow data[8] if copied.
+    for (uint8_t dlc = 9; dlc <= 15; dlc++)
+        CHECK(!tesla_can_rx_accept(0x3FDu, false, false, dlc), "dlc %u rejected", dlc);
+    // A 29-bit frame whose id masks down to a target id must not alias it.
+    CHECK(!tesla_can_rx_accept(0x3FDu, true, false, 8), "extended 0x3FD rejected");
+    CHECK(!tesla_can_rx_accept(0x18DB33F1u, true, false, 8), "extended OBD id rejected");
+    // A remote frame carries no payload; a modified copy would be garbage.
+    CHECK(!tesla_can_rx_accept(0x370u, false, true, 8), "remote 0x370 rejected");
+    CHECK(!tesla_can_rx_accept(0x800u, false, false, 8), "id > 0x7FF rejected");
+
+    CHECK(tesla_can_tx_valid(0x3FDu, 8), "tx 0x3FD dlc8 valid");
+    CHECK(tesla_can_tx_valid(0x082u, 0), "tx dlc0 valid");
+    CHECK(!tesla_can_tx_valid(0x3FDu, 9), "tx dlc9 invalid");
+    CHECK(!tesla_can_tx_valid(0x800u, 8), "tx id 0x800 invalid");
+}
+
 int main() {
     printf("test_esp32_core: ESP32 firmware handler host tests\n");
     test_hw4_mux2_profile_layout();
@@ -623,6 +650,7 @@ int main() {
     test_signal_map();
     test_di_speed();
     test_state_init();
+    test_can_frame_filter();
 
     printf("\n%d passed, %d failed\n", g_pass, g_fail);
     return g_fail == 0 ? 0 : 1;

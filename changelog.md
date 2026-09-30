@@ -1,3 +1,7 @@
+## 2.16-beta.32 — Battery Precondition toggle on the ESP32 dashboard
+
+- **ESP32: Battery Precondition is on the web dashboard now (#192).** The 0x082 preheat trigger and its saved setting were already in the ESP32 build, but the only switch for it was in the Flipper Settings menu, so ESP32 users had no way to turn it on. The dashboard now has a Precondition switch next to Suppress Chime, and it shows in the status JSON and the active-features summary. It transmits through the same gate as everything else (Listen-Only, OTA and the Autopark pause all still apply). Thanks @siksndavis for asking where it went. (PR #196)
+
 ## 2.16-beta.31 — HW4 speed profile fix, ESP32 CAN frame checks, OTA rollback
 
 - **HW4: the speed profile no longer clears the 0x3FD mux2 valid bit (#59).** The profile was written into byte 7 at `<<5` (bits 61-63). Real mux2 frames always carry byte 7 = `0x90`, and bit 63 is set on every 0x3FD mux, so it's the per-mux valid flag and the profile is bits 60-62. For profiles 0-3 the old write cleared bit 63 and put 1/3/5/7 in the real profile field, and on-car the speed offset in the same frame stopped working. Both cores now write `<<4`, which matches ev-open-can-tools and the original CanFeather code. A host test built on a real mux2 capture fails if bit 63 or bytes 0-6 ever change. Thanks @Jclevy-CN for the on-car A/B that pinned it. (PR #197)

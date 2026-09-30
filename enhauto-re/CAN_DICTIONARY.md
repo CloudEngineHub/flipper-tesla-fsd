@@ -263,8 +263,10 @@ frame.data[7] = (frame.data[7] & 0x1F) | ((speedProfile & 0x07) << 5);
 ```
 
 Our current code uses `(speed_profile & 0x07) << 4` which is **bits 4-6 = bit 60-62**.
-Different by one bit. Worth verifying empirically which is right — there might be
-a HW3 vs HW4 difference, or one of us is off by one.
+Different by one bit. Resolved (#59): `<< 4` is right. Real mux2 frames carry
+byte7 = 0x90 and bit 63 is set on every 0x3FD mux, so it's the mux valid flag.
+The `<< 5` write clears it for profiles 0-3 and puts 1/3/5/7 in the real profile
+field; on-car, the speed offset in the same frame stopped working until `<< 4`.
 
 **4. Steering effort change** (`0x101` / 257 dec — `GTW_epasControl`):
 

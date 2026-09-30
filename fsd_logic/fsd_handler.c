@@ -498,19 +498,6 @@ void fsd_handle_esp_status(FSDState* state, const CANFRAME* frame) {
     state->driver_brake_applied = (brake >= 2);
 }
 
-// --- GTW_epasControl (0x101) steering tune WRITE ---
-// tuncasoftbildik: GTW_epasTuneRequest startBit=2, 3 bits, little-endian
-// Values: 1=COMFORT, 2=STANDARD, 3=SPORT
-// NOTE: Chassis CAN only — not on OBD-II Party CAN
-
-void fsd_build_steering_tune_frame(CANFRAME* frame, uint8_t mode) {
-    memset(frame, 0, sizeof(CANFRAME));
-    frame->canId = CAN_ID_GTW_EPAS_CTRL;
-    frame->data_lenght = 8;
-    // GTW_epasTuneRequest: startBit 2, 3 bits LE → byte0 bits [4:2]
-    frame->buffer[0] = (mode & 0x07) << 2;
-}
-
 // --- DAS_status parser: AP state, blind spot, FCW, speed limit ---
 //
 // HW-dependent CAN ID + byte layout:

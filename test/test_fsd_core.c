@@ -2599,12 +2599,6 @@ static void test_extras_and_builders(void) {
     CHECK(f.data_lenght == 3, "park dlc 3");
     CHECK(f.buffer[2] == 0x01, "park button pressed byte2");
 
-    // Steering tune frame builder (0x101).
-    zero(&f);
-    fsd_build_steering_tune_frame(&f, 3);
-    CHECK(f.canId == CAN_ID_GTW_EPAS_CTRL, "tune id 0x101");
-    CHECK(f.buffer[0] == (3 << 2), "tune byte0 got 0x%02X exp 0x0C", f.buffer[0]);
-
     // Precondition frame builder (0x082).
     zero(&f);
     fsd_build_precondition_frame(&f);

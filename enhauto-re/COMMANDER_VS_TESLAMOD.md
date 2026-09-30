@@ -110,7 +110,7 @@ Based on:
 |---|----------|-----------|-----------|-----|--------|
 | 4 | `DriveModeAccel` | ✅ | ❌ `UI_pedalMap` | ETH `0x334` | BLOCKED |
 | 5 | `DriveModeRegen` | ✅ | ❌ | ETH | BLOCKED |
-| 6 | `DriveModeSteering` | ✅ | ✅ `GTW_epasTuneRequest` `0x101` | CHASSIS | SHIPPED v2.5 (Chassis CAN tap required) |
+| 6 | `DriveModeSteering` | ✅ | ❌ removed | CHASSIS | 0x101 write dropped (dead toggle); read-only tune-mode via 0x370 remains, below |
 | 46 | `StoppingMode` | ✅ | ❌ `UI_stoppingMode` | ETH `0x334` | BLOCKED |
 | 55 | `TractionControl` | ✅ | ❌ `UI_tractionControlMode` | ETH `0x293` | BLOCKED |
 | 56 | `SpeedControl` | ✅ | ❌ | ETH | BLOCKED |
@@ -127,8 +127,8 @@ Based on:
 
 | # | ActionID | Commander | Tesla Mod | Bus | Status |
 |---|----------|-----------|-----------|-----|--------|
-| 57 | `GearShift` | ✅ | ✅ `0x229` SCCM_rightStalk | VEHICLE | SHIPPED v2.5 |
-| 58 | `SimulatePARK` | ✅ | ✅ `0x229` parkButtonStatus | VEHICLE | SHIPPED v2.5 |
+| 57 | `GearShift` | ✅ | ❌ `0x229` SCCM_rightStalk | VEHICLE | NOT SHIPPED — the only `0x229` TX is the ESP32 Continuous AP double press (HW3/Legacy, off by default) |
+| 58 | `SimulatePARK` | ✅ | ⚠️ `0x229` parkButtonStatus | VEHICLE | PRESENT BUT HARD-DISABLED — builder added in v2.6, never fires (`state.extra_park_inject = false` in `scenes/fsd_running.c`) |
 
 ### Category: Doors / Trunk / Frunk / Charge Port
 

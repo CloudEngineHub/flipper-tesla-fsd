@@ -25,7 +25,7 @@
 >
 > **What we now know about the ban mechanism** (community research, April 2026):
 > - The ban downgrades `GTW_autopilot` tier from SELF_DRIVING (3) to ENHANCED (2) in `0x7FF` mux=2 byte[5] bits 4:2
-> - `0x3FD` mux=0 byte[4] bit 7 (TLSSC UI visible flag) is independently cleared
+> - `0x3FD` mux=0 byte[4] bit 6 (bit 38, the TLSSC flag) is independently cleared. Bit 39 (byte[4] bit 7) is Continue on Green, not TLSSC
 > - `0x259 APP_fsdSuspendState` is set to SUSPENDED on banned cars
 > - The AP ECU's primary entitlement path appears to be **Ethernet** — shadow-injecting `0x7FF` alone does not override the ban. However, other CAN-side mechanisms DO affect AP behavior: **TLSSC Restore (0x331) + 0x3FD mux0 bit38** has been confirmed by @RoyRakete to reliably re-enable AP/TACC on banned HW3 / 2026.2.6 ([#18](https://github.com/hypery11/flipper-tesla-fsd/issues/18#issuecomment-4413430516))
 > - TLSSC Restore alone can partially recover stop sign / traffic light control on Palladium and HW4 platforms, but does NOT restore full FSD

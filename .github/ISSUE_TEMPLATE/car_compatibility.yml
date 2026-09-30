@@ -93,11 +93,20 @@ body:
     id: result
     attributes:
       label: Result
+      description: Pick every line that applies — one per feature you tested
+      multiple: true
       options:
         - Worked — FSD activated and remained stable
         - Worked — FSD activated, some glitches (please describe)
         - Did not work — FSD never activated
         - Did not work — error or crash (please describe)
+        - Nag killer worked — no hands-on nags
+        - Nag killer partly worked — nags reduced but still show (please describe)
+        - Nag killer did not work
+        - TLSSC Restore worked — stop sign / traffic light control back
+        - TLSSC Restore did not work
+        - Other feature worked (name it below)
+        - Other feature did not work (name it below)
     validations:
       required: true
 

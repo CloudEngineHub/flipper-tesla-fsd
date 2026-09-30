@@ -585,8 +585,34 @@ static void test_state_init(void) {
     CHECK(s.op_mode == OpMode_ListenOnly && !fsd_can_transmit(&s), "init: listen-only, TX blocked");
 }
 
+// ── 0x3FD mux2 HW4 speed profile layout (#59), parity with the Flipper core ───
+// Real HW4 mux2 payload: byte7 = 0x90 (bit 63 = mux2 valid, bits 60-62 = profile 1).
+static void test_hw4_mux2_profile_layout(void) {
+    static const uint8_t k_hw4_mux2[8] = {0x02, 0x28, 0x00, 0x00, 0x00, 0x00, 0x00, 0x90};
+    for (int p = 0; p <= 4; p++) {
+        FSDState s;
+        memset(&s, 0, sizeof(s));
+        s.hw_version = TeslaHW_HW4;
+        s.fsd_unlock = true;
+        s.speed_profile = p;
+        CanFrame f;
+        memset(&f, 0, sizeof(f));
+        f.id = 0x3FD;
+        f.dlc = 8;
+        memcpy(f.data, k_hw4_mux2, 8);
+        CHECK(fsd_handle_autopilot_frame(&s, &f), "#59 p%d: HW4 mux2 modified", p);
+        CHECK(((f.data[7] >> 4) & 0x07) == p, "#59 p%d: profile in bits 60-62, got %u", p,
+              (f.data[7] >> 4) & 0x07);
+        CHECK((f.data[7] & 0x80) != 0, "#59 p%d: bit63 (mux2 valid) kept, byte7=0x%02X", p,
+              f.data[7]);
+        CHECK((f.data[7] & 0x0F) == 0x00, "#59 p%d: byte7 low nibble untouched", p);
+        CHECK(memcmp(f.data, k_hw4_mux2, 7) == 0, "#59 p%d: bytes 0-6 untouched", p);
+    }
+}
+
 int main() {
     printf("test_esp32_core: ESP32 firmware handler host tests\n");
+    test_hw4_mux2_profile_layout();
     test_gtw_car_state();
     test_ota_parity();
     test_ota_tx_gate();

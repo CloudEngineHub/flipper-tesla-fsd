@@ -26,9 +26,9 @@ body:
       description: |
         If this is a CAN-injection feature, paste the CAN ID and signal name
         and link the public source you got it from (opendbc, mikegapinski,
-        upstream Tesla-OPEN-CAN-MOD MR, etc.). If you don't know yet, leave
+        ev-open-can-tools PR/issue, etc.). If you don't know yet, leave
         blank — we'll figure it out together.
-      placeholder: "0x273 VCFRONT_lighting bit X — opendbc tesla_model3.dbc line Y"
+      placeholder: "0x3F5 VCFRONT_lighting bit X — opendbc tesla_model3_vehicle.dbc line Y"
 
   - type: textarea
     id: tier

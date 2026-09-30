@@ -283,20 +283,22 @@ And these "Vehicle CAN" signals are also writable on bus 6:
 >
 > A dual-CAN board (e.g. **LILYGO T-2CAN**) gives the full attack surface in
 > one device: Bus 6 for `0x3FD` / `0x370` / `0x3F8` / TLSSC, and Vehicle CAN
-> direct for `0x3C2`. This ships as the `lilygo-t2can` platformio env.
+> direct for `0x3C2`. This ships as the `lilygo-t2can` platformio env. Note:
+> ScrollPress AP (`0x3C2`) is only implemented in the Flipper app so far; the
+> ESP32 build doesn't inject `0x3C2`.
 
 > [!IMPORTANT]
 > **On HW4-modern, `0x370` EPAS3P_sysStatus is the mirror case of `0x3C2`: it is
 > absent from Vehicle CAN (X179 pin 9/10/11).** Dual-CAN captures on two cars —
 > @jewelrylin's Juniper RWD (0 / 20,760 frames over 60 s on pin 9/10) and
-> @DrStrangeglovebox's MYP Giga Berlin (0 / 2,653 on pin 10/11) — confirm `0x370`
-> only appears on **Bus 6 (pin 13/14)** as the gateway-forwarded copy. The EPAS
+> @DrStrangeglovebox's MYP Giga Berlin (0 / 2,653 on pin 10/11) — show `0x370` on
+> pin 13/14 but not on Vehicle CAN. The Service Mode CAN Port page later showed
+> 13/14 is Chassis CAN on harness `1933903-XX` (see the X179 note above). The EPAS
 > module does **not** receive `0x370` on Vehicle CAN on these trims, so relocating
-> the nag echo from Bus 6 to Vehicle CAN does **not** reach EPAS — it is not a
-> viable nag-killer pivot for HW4-modern. The only remaining X179 location that
-> could carry the EPAS-side frame is **Chassis Bus 3 (pin 18/19)**; until a
-> Listen-Only capture there confirms it, the 14.x HW4 nag path stays open. See
-> [#100](https://github.com/hypery11/flipper-tesla-fsd/issues/100).
+> the nag echo from 13/14 to Vehicle CAN does **not** reach EPAS — it is not a
+> viable nag-killer pivot for HW4-modern. Resolved: the nag killer works on Party
+> CAN (pins 2/3) on HW4 2026.20 ([#100](https://github.com/hypery11/flipper-tesla-fsd/issues/100));
+> see the X179 note above.
 
 **One bus, one connection, reads and writes almost everything.**
 
@@ -355,6 +357,7 @@ Full pinout (the four pins this firmware uses are bolded):
 | 18  | CAN+ PT | DI front, THC, APE (Autopilot ECU), charge-port logic — backbone for motor control, HV battery management, charging, regen braking |
 | 19  | CAN- PT | "   |
 | **20** | **GND** | **Chassis ground** |
+
 For Tesla FSD Unlock the four pins you need are **1, 13, 14, 20**:
 
 ```
@@ -380,7 +383,7 @@ Any ESP32 dev board + any MCP2515 CAN module from Aliexpress.
 
 | Component | Price |
 |-----------|-------|
-| ESP32-C3-SuperMini or ESP32-DevKitC | ~$3-4 |
+| ESP32-DevKitC (classic ESP32) | ~$3-4 |
 | MCP2515 CAN module (TJA1050 transceiver) | ~$1.50-3 |
 | X179 pigtail cable (4-wire, or DIY from connector) | ~$3-5 |
 | **Total** | **~$8-12** |
@@ -388,8 +391,8 @@ Any ESP32 dev board + any MCP2515 CAN module from Aliexpress.
 Wire: X179 CAN-H/CAN-L → MCP2515 module CAN-H/CAN-L. X179 12V → buck
 converter → ESP32 VIN. X179 GND → common GND.
 
-Build with `pio run -e esp32-mcp2515`, adjust pin config in
-`esp32/.firmware/config.h`.
+Build with `pio run -e esp32-mcp2515` (from `esp32/`; targets classic ESP32),
+adjust pin config in `esp32/.firmware/config.h`.
 
 ### Setup B — M5Stack plug & play (~$20)
 
@@ -414,12 +417,14 @@ the screw terminals, 12V to VIN, GND to GND. Build: `pio run -e m5stack-atom`.
 The T-2CAN has **two independent CAN controllers — one native ESP32-S3
 TWAI and one MCP2515 (SPI)** — plus dual screw terminals, 12–24V input,
 WiFi, BLE, QWIIC, and USB-C. The `lilygo-t2can` build drives both (the
-`CAN_DRIVER_T2CAN_DUAL` driver). Connect X179 to one screw terminal; the
-other channel stays free for future use (e.g., OBD-II Party CAN for
-redundancy, or a second X179 bus pair).
+`CAN_DRIVER_T2CAN_DUAL` driver): frames from either channel are processed,
+and modified frames go back out on the bus they came from. Wire one channel
+to the pair carrying `0x3FD` and the other to a second X179 pair, e.g. Party
+CAN (pins 2/3) for the nag killer
+([#100](https://github.com/hypery11/flipper-tesla-fsd/issues/100)). Check
+**Service Mode → CAN Port** for which pair is which on your harness.
 
-This is the recommended board for anyone who wants headroom for
-dual-bus features in a future firmware update.
+This is the recommended board for dual-bus setups.
 
 ### Setup D — LILYGO TTGO T-Display + MCP2515 (~$20)
 
@@ -656,6 +661,11 @@ For any module that stays plugged in:
 3. Wake on MCP2515 INT pin (frame received = car woke up) or on a
    timer (check every 60 seconds).
 
+In this firmware, deep sleep is implemented on the LilyGO T-CAN485
+(`esp32-lilygo`) only. It sleeps after 120 s of CAN silence (adjustable in
+the dashboard) with CAN TX held recessive, and wakes on bus activity on the
+transceiver's RX pin.
+
 This is how commercial products handle permanent installation without draining the 12V battery.
 
 ---
@@ -669,6 +679,6 @@ works with a config change. Community-confirmed boards:
 - Waveshare RS485-CAN-HAT (MCP2515) — re-wire jumpers for Flipper
 - Waveshare ESP32-S3-RS485-CAN — TWAI driver, all-in-one
 - Adafruit RP2040 / Feather M4 CAN — see upstream
-  [Karolynaz/waymo-fsd-can-mod](https://github.com/Karolynaz/waymo-fsd-can-mod)
+  [ev-open-can-tools](https://github.com/ev-open-can-tools/ev-open-can-tools)
 
 If you get a non-listed board working, open a PR with the pin map.

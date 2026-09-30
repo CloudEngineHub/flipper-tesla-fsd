@@ -7,7 +7,7 @@ void tesla_fsd_scene_about_on_enter(void* context) {
     widget_reset(app->widget);
     widget_add_string_element(
         app->widget, 64, 2, AlignCenter, AlignTop, FontPrimary,
-        "Tesla FSD Unlock");
+        "Tesla Mod");
 
     widget_add_string_element(
         app->widget, 64, 14, AlignCenter, AlignTop, FontSecondary,

@@ -7,8 +7,8 @@ body:
     id: app_version
     attributes:
       label: App version
-      description: From Releases page or main menu (e.g. v2.4.0)
-      placeholder: "v2.4.0"
+      description: Release tag you downloaded from the Releases page (e.g. v2.16-beta.32)
+      placeholder: "v2.16-beta.32"
     validations:
       required: true
 
@@ -20,7 +20,13 @@ body:
         - Flipper Zero + Electronic Cats CAN Add-On
         - Flipper Zero + generic MCP2515 module
         - Flipper Zero + other (please specify)
-        - ESP32 (PR #6 port)
+        - ESP32 — M5Stack ATOM Lite / Matrix + ATOMIC CAN
+        - ESP32 — LilyGO T-CAN485
+        - ESP32 — LilyGO T-2CAN
+        - ESP32 — TTGO T-Display + MCP2515
+        - ESP32 — Waveshare ESP32-S3-RS485-CAN
+        - ESP32 — generic ESP32 + MCP2515 / SN65HVD230
+        - ESP32 — other (please specify)
     validations:
       required: true
 
@@ -60,4 +66,4 @@ body:
     id: screen
     attributes:
       label: Screen output / counters
-      description: What did the Flipper screen show? RX / TX / Err counts? Screenshot welcome.
+      description: What did the Flipper screen or the ESP32 dashboard show? RX / TX / error counts? Screenshot welcome.

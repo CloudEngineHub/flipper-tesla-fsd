@@ -15,7 +15,6 @@
 [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue?style=flat-square)](LICENSE)
 [![Build](https://img.shields.io/badge/build-ufbt-brightgreen?style=flat-square)](https://github.com/flipperdevices/flipperzero-ufbt)
 [![Flipper target](https://img.shields.io/badge/Flipper%20target-7%20%2F%20API%2087.1-orange?style=flat-square)](https://github.com/flipperdevices/flipperzero-firmware)
-[![Tracked on FSD CAN Mod Hub](https://img.shields.io/badge/tracked%20on-FSD%20CAN%20Mod%20Hub-orange?style=flat-square)](https://fsdcanmod.com/project/hypery11-flipper-zero)
 
 > **开源 Tesla CAN bus 工具集，支持 Flipper Zero 与 ESP32。** FSD 区域锁绕过、给 VIN 被封禁车辆的 TLSSC Restore、带拟真扭力变化的 nag killer、GTW Config Replay、BMS 实时仪表板，以及横跨 Model 3、Model Y、Model S、Model X 的 30+ 个 CAN handler。支持 HW3、HW4 与 Legacy HW1/HW2。$200+ 的 S3XY Commander 的免费替代方案 — 搭配 [ESP32 移植版](https://github.com/hypery11/flipper-tesla-fsd/tree/main/esp32) 总成本最低只要 **$14**。
 
@@ -87,7 +86,7 @@
 - 悲观默认：大多数 14.x 固件用户要到自动转向在行驶中脱离时才知道自己受影响。这个警告会在他们启用任何 TX 功能之前先提醒到。
 - 可通过 **On 14.x?** 设置开关（Flipper）或横幅上的 **Dismiss** 按钮（ESP32，存在 NVS）退出。若你确定是 pre-14.x 固件就可关闭。
 - 地区注意：执法强度因市场而异。部分地区（没有 Tesla 直营的市场）似乎执法较不积极。14.x / 2026.20 的实时追踪见 [#122](https://github.com/hypery11/flipper-tesla-fsd/issues/122)。
-- **「2026.14.x / .20 / .26.x 还能解锁 FSD 吗？」** 简短答案：不行——激活 preflight 加上链外区域锁挡住了,但 nag killer / TLSSC / Summon EU / 抓包仍可用。完整说明见置顶的 [FSD-on-14.x FAQ (#168)](https://github.com/hypery11/flipper-tesla-fsd/discussions/168),frame 级证明见 [#163](https://github.com/hypery11/flipper-tesla-fsd/discussions/163)。
+- **「2026.14.x / .20 / .26.x 还能解锁 FSD 吗？」** 简短答案：不行——激活 preflight 加上链外区域锁挡住了,但 nag killer / TLSSC / Summon EU / 抓包仍可用。完整说明见 [FSD-on-14.x FAQ (#168)](https://github.com/hypery11/flipper-tesla-fsd/discussions/168),frame 级证明见 [#163](https://github.com/hypery11/flipper-tesla-fsd/discussions/163)。
 
 ### 诊断（只读，不需要 FSD）
 - BMS 实时仪表板：电池组电压、电流、SoC、温度范围、**能耗（Wh/km）**
@@ -171,7 +170,7 @@
 |----------|------------|----------|
 | Legacy（HW1/HW2） | bit46 | 3 段（0-2） |
 | HW3 | bit46 | 3 段（0-2） |
-| HW4（FSD V14+） | bit46 + bit60、bit47 | 5 段（0-4） |
+| HW4（FSD V14+） | bit46 + bit60 | 5 段（0-4） |
 
 ---
 
@@ -353,9 +352,6 @@ ESP32 更便宜（$14 vs $200+），有 WiFi 仪表板、NVS 保存与深度睡�
 **支持 Model S / Model X 吗？**
 支持。Palladium S/X（2021+）已确认可用 TLSSC Restore。2021 前、做了 HW3 retrofit 的 S/X 通过 Legacy→HW3 自动升级可用。HW1/HW2 Model S/X 走 Legacy 模式（`0x3EE`）。Model S/X 使用不同的 BMS CAN ID — BMS 仪表板可能显示错误数值。
 
-**这会不会把车搞坏（brick）？**
-只动 UI 设置 frame。不会写入刹车、转向或动力系统。App 默认以 Listen-Only 模式开机。完整 TX 面清单见 [SECURITY.md](SECURITY.md)。
-
 **一定要 Flipper CAN Add-On 吗？**
 给 Flipper：是的，任何 MCP2515 模块（Electronic Cats、通用板子）都行。给 ESP32：多数支持的板子有内建 CAN 收发器（M5Stack ATOMIC CAN、Lilygo T-CAN485、Waveshare S3）。
 
@@ -375,8 +371,8 @@ ESP32 更便宜（$14 vs $200+），有 WiFi 仪表板、NVS 保存与深度睡�
 - [commaai/opendbc](https://github.com/commaai/opendbc) — Tesla CAN 信号数据库
 - [ElectronicCats/flipper-MCP2515-CANBUS](https://github.com/ElectronicCats/flipper-MCP2515-CANBUS) — Flipper 用 MCP2515 驱动
 - 社区贡献者 — 本项目赖以运作的实车测试、抓包与研究：
-  - **协议、nag killer 与 2026.14.x：** @jewelrylin（T-2CAN 双总线抓包、frame-content preflight 测试、X179 Service Mode 针脚图）、@DrStrangeglovebox（`0x370` 参考抓包 + HW4 双 CAN 数据 + 安全发现）、@ssw0209-sys（Mode-C 转向扭力参考 + HW4 14.x 测试）、@0xAccretion（HW4 Highland 中规 MIC DAS 布局发现，#116/#117）、@dunckencn（国行 HW3 start-after-AP 验证、steer-jerk 与 bus-off 报告）、@kristopf007（HW4 14.x 实车测试）、@anoblekman（Highland HW4 DAS 解码 + 车内自动泊车安全发现，#177/#180）
-  - **功能、抓包与 PR：** @JakNo（ScrollPress AP / `0x3C2`）、@vrs11（Continuous AP）、@sqladm1n（RTC 抓包日志 PR + 总线/接线排查）、@DmitroPanteliuk（全速率 `0x229` 抓包）、@se7en7777777（`0x485` / Highland / 校验和分析）、@RoyRakete（TLSSC 封禁车组合）、@mamixsystem（post-SOP10 连接器参考;frame 级 14.x FSD-engage 决定性调查，#163）、@p0sixturtle（Summon / tier-selector 线索，#139）、@dahua910（RHD 需求，#66）、@HamzaObaidat（剧院模式 `0x118` 研究，#149）、@fboulegue（EU / 新线束 Juniper 报告，#143/#109/#110）、@densen2014（ESP32 HW 选择器建议 #110、TLSSC bit38 开关 PR #159、Summon 行驶中安全防护建议 #160）、@Tesla234987234sdf（Palladium OTA 误锁报告 + 抓包，#183/#175）、@tommybsb-lab（ATOM Lite / Juniper 实测报告，促成 Signal Map 修正，#100）、@sb1089（HW3 2026.26 nag 抓包，#122）、@ukinora（独立的 `0x318` 循环计数器分析）、@adrianpadure99（网页烧录器“can't fetch”报告，#176）、@danpadure（市区 Autopark 暂停误触报告，#176）、@Jclevy-CN（HW4 speed profile 清掉 bit 63 的 bug + 实车 A/B，#59；ESP32 加固思路来自其 fork）、@siksndavis（ESP32 缺少 Precondition 开关的报告，#192）
+  - **协议、nag killer 与 2026.14.x：** @jewelrylin（T-2CAN 双总线抓包、frame-content preflight 测试、X179 Service Mode 针脚图）、@DrStrangeglovebox（`0x370` 参考抓包 + HW4 双 CAN 数据 + 安全发现）、@ssw0209-sys（Mode-C 转向扭力参考 + HW4 14.x 测试）、@0xAccretion（HW4 Highland 中规 MIC DAS 布局发现，#116/#117）、@dunckencn（国行 HW3 start-after-AP 验证、steer-jerk 与 bus-off 报告）、@kristopf007（HW4 14.x 实车测试）、@anoblekman（Highland HW4 DAS 解码 + 车内自动泊车安全发现，#177/#180）、@SkyRaax（在 Party CAN 2/3 上跑 nag killer，HW4 2026.20，#100）、@LonelyCheese09（有标注的 HW3 2026.14.6 nag 抓包，促成 EPAS-faithful 修正，#122）、@jim608（有标注的 HW3 2026.14.6 nag 抓包，促成 EPAS-faithful 修正，#121/#122）、@weigibbor（2026.20 中规 MIC 抓包 + 区域锁层级 TX 测试，#117）、@7hf6cfqzkb-png（激活延迟报告，促成 Instant Engage，#129）、@cquanu（第一个 2026.14.2 不兼容报告，#52）、@deftdawg（按需握力脉冲的测试与集成，#70；TTGO T-Display 测试报告）、@zdenekbouresh（DAS 感知 nag 门控，移植自 ev-open-can-tools PR #5）
+  - **功能、抓包与 PR：** @JakNo（ScrollPress AP / `0x3C2`）、@vrs11（Continuous AP）、@sqladm1n（RTC 抓包日志 PR + 总线/接线排查）、@DmitroPanteliuk（全速率 `0x229` 抓包）、@se7en7777777（`0x485` / Highland / 校验和分析）、@RoyRakete（TLSSC 封禁车组合）、@mamixsystem（post-SOP10 连接器参考;frame 级 14.x FSD-engage 决定性调查，#163）、@p0sixturtle（Summon / tier-selector 线索，#139）、@dahua910（RHD 需求，#66）、@HamzaObaidat（剧院模式 `0x118` 研究，#149）、@fboulegue（EU / 新线束 Juniper 报告，#143/#109/#110）、@densen2014（ESP32 HW 选择器建议 #110、TLSSC bit38 开关 PR #159、Summon 行驶中安全防护建议 #160）、@Tesla234987234sdf（Palladium OTA 误锁报告 + 抓包，#183/#175）、@tommybsb-lab（ATOM Lite / Juniper 实测报告，促成 Signal Map 修正，#100）、@sb1089（HW3 2026.26 nag 抓包，#122）、@ukinora（独立的 `0x318` 循环计数器分析）、@adrianpadure99（网页烧录器“can't fetch”报告，#176）、@danpadure（市区 Autopark 暂停误触报告，#176）、@Jclevy-CN（HW4 speed profile 清掉 bit 63 的 bug + 实车 A/B，#59；ESP32 加固思路来自其 fork）、@siksndavis（ESP32 缺少 Precondition 开关的报告，#192）、@maslyankov（M5Stack ATOM Matrix + GPIO 39 按键，PR #46）、@BenjaminFaal（Juniper 上的 `0x485` 换挡 frame，#43）、@jangshik（ESP32 Wi-Fi AP+STA 需求 #101、T-2CAN 配置 #96）、@TzCoMe（Telemetry Off 背后的遥测关闭研究）、@0n3-70uch（用示波器测出 2024 年 4 月后 26-pin 接头的引脚，#52）、@TianzeWang（Tesla SOP8/SOP9 电路参考资料，#52）、@Tikernel（Model Y Juniper HW4 2026.2.11 中国正向兼容性数据）、@LeeSSXX（Momentum / Xtreme 编译错误报告，#17）
   - **封禁研究、平台测试、ESP32、bug 修复：** @THER4iN、@MiniCS、@kp43h8、@gauner1986、@dmagyar、@ViPiMP、@marcobellinoroci-source、@danpadure、@bruvv、@Symness、@hkloudou、@nagotti、@patatman、@JordanzhaoD
 - `Starmixcraft/tesla-fsd-can-mod` — 原始 CanFeather FSD 研究（GitLab repo 已被移除；镜像在 [Karolynaz/waymo-fsd-can-mod](https://github.com/Karolynaz/waymo-fsd-can-mod)）
 

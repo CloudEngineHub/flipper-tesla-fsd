@@ -267,6 +267,18 @@ The theme: make the device understand the bus it's plugged into and auto-record 
 - **8 additional fixes** from adversarial code review: Track Mode safety gate, ESP32 HW4 misclassification race (50-frame threshold), `0x370` EPAS DLC validation, malloc NULL checks, sizeof(pointer) cleanup, SPI handle init.
 - Thanks: @ViPiMP (sizeof BusFault root cause), @dmagyar (Legacy HW + NAG fixes), @Symness (Ban Shield learning approach), @nagotti (OTA false positive testing)
 
+## 2.11.2 — BusFault fix for the Electronic Cats CAN Add-On v1.2
+
+- **Root cause of the v1.2 BusFault (#17, #33).** `read_register()` and `mcp_get_status()` in the MCP2515 SPI driver passed `sizeof(data)` as the RX length, but `data` is a pointer, so the read wrote 4 bytes into a 1-byte stack variable and smashed the return address. Now reads 1 byte. The same bug is in the upstream Electronic Cats driver; their app's 30 KB stack hides it.
+- Includes the v2.11.1 SPI init and stack changes.
+- Thanks: @ViPiMP (root cause + test build), @swatchie-1, @metinkaradk-droid, @nagotti, @bizzul, @theeogflip-bot (testing across firmware versions and HAT revisions).
+
+## 2.11.1 — SPI init + bigger stacks (pre-release)
+
+- **SPI handle init** — `furi_hal_spi_bus_handle_init()` is now called after the handle is allocated (it was filled in but never registered with the bus), and the handle is zeroed first.
+- **Stacks** — worker threads 2048 → 4096 bytes, app main 4 KB → 8 KB. Test build for the Electronic Cats CAN Add-On v1.2 BusFault (#17, #33); the actual cause turned up in v2.11.2.
+- **ESP32: Waveshare ESP32-S3-RS485-CAN** — new `waveshare-s3-can` env (onboard TWAI transceiver). Also fixes `-D PIN_LED` / `-D PIN_BUTTON` build flags being silently overridden by `config.h`. (PR #35, @hkloudou)
+
 ## 2.11 — Legacy HW detection + NAG killer fixes
 
 - **Legacy HW detection fix** — `fsd_detect_hw_version()` fell through to `TeslaHW_Unknown` for `das_hw=0` and `das_hw=1`. MCU2/HW3 retrofit Model S/X reports `das_hw=0`, silently disabling FSD injection for this entire class of vehicle. Now correctly maps to `TeslaHW_Legacy`.
@@ -308,6 +320,12 @@ The theme: make the device understand the bus it's plugged into and auto-record 
 - **MCP2515 SPI NULL crash fix** (v2.7.1 hotfix) — `mcp_alloc()` now properly initializes the SPI bus handle.
 - **SPI callback const fix** — compiles on Momentum and Xtreme firmware.
 - **fsdcanmod.com badge restored** — community tracker site back online with accurate project tracking.
+
+## 2.7.1 — Hotfix: crash on mode select
+
+- **MCP2515 SPI NULL crash (#17)** — the app opened fine but hit `furi_check failed` as soon as any mode was picked (Auto Detect, Force HW3/HW4, Legacy). The MCP2515 struct was allocated with plain `malloc`, so its SPI handle stayed NULL. Now uses `mcp_alloc()`, which sets the handle up via `spi_alloc()`, and `free_mcp2515()` on exit.
+- **Simplified Chinese README** (`README_zh-CN.md`), plus a language switcher on all three READMEs.
+- Thanks: @THER4iN, @MyBigBall, @LeeSSXX (#17).
 
 ## 2.7 — Upstream parity + Momentum fix + X179 guide
 

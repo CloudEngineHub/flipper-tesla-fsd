@@ -64,8 +64,9 @@ If you don't have a Tesla yourself, that's fine — open the PR and tag it
 
 ## Code style
 
-The C side is plain C99, no C++ features, no allocations on the worker
-thread. Match the style of the surrounding file. Concretely:
+The C side is plain C11 (the host tests build with `-std=c11`, see
+`test/Makefile`), no C++ features, no allocations on the worker thread.
+Match the style of the surrounding file. Concretely:
 
 - 4-space indent, no tabs
 - snake_case for functions and locals, PascalCase for types and enum values
@@ -92,8 +93,10 @@ Don't push directly to `main`.
   Write what you actually did, in your own voice, in whatever language
   you're comfortable with — Chinese, English, German, Korean, all welcome
   in PR conversations.
-- Adding features that need a feature flag "for safety" — if it's not
-  safe enough to default on, the design isn't ready
+- New TX features that are on by default. Every new TX path ships off by
+  default and opt-in, the device still boots Listen-Only on first run, and
+  every send goes through `fsd_can_transmit()` (Listen-Only, OTA and
+  Autopark gate)
 - Touching brakes, steering, or powertrain CAN IDs without a long
   conversation in an issue first
 - Bumping the version in your PR — the maintainer does that at release

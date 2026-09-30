@@ -1,20 +1,20 @@
-# Tesla FSD Unlock for ESP32 (OBD-II Plug & Play)
+# Tesla Mod for ESP32 (OBD-II Plug & Play)
 
 > ESP32 port of [hypery11/flipper-tesla-fsd](https://github.com/hypery11/flipper-tesla-fsd) — same CAN logic, different hardware, with a built-in WiFi dashboard.
 
 Unlock Tesla FSD with an ESP32 + CAN transceiver via OBD-II. No Flipper Zero needed — ~¥100 total cost.
 
 > [!CAUTION]
-> **✅ ESP32 Port — TESTED ON VEHICLE (Model 3 2022 HW3)**
+> **ESP32 port — tested on real cars**
 >
-> This firmware has been tested on a **Tesla Model 3 (2022, HW3)** and works well in real-world use. CAN logic is faithfully ported from hypery11/flipper-tesla-fsd.
+> First tested on a **Model 3 (2022, HW3)**. Testers have since run it on a Model 3 2020 HW3 in the EU (@vrs11), a 2017 Model X and Model S (HW3/MCU2) on the LilyGO T-CAN485 (@dmagyar, nag killer), a Model 3 HW4 on 2026.20 with a T-2CAN (@SkyRaax, nag killer on Party CAN), an HW4 car on 2026.14.6 (@ssw0209-sys, nag killer + Nag Burst + AP-First) and a China HW3 car (@dunckencn, Abort Guard / Instant Engage). Per-car results are in the main README's [Compatibility](../README.md#compatibility) table and in the [changelog](../changelog.md).
 >
 > **If you test this on another vehicle model, please file a [Car compatibility report](https://github.com/hypery11/flipper-tesla-fsd/issues/new?template=car_compatibility.yml).**
 
 > [!WARNING]
-> **BMS section is currently not working in real vehicle usage.**
+> **BMS panel: Model 3/Y frames only, not yet confirmed on the ESP32.**
 >
-> The BMS parser and dashboard fields are implemented in code, but on current tested setup they do not provide reliable/usable live data yet.
+> It reads `0x132` / `0x292` / `0x312`. Model S/X use different BMS IDs, so values are wrong there ([#29](https://github.com/hypery11/flipper-tesla-fsd/issues/29)). Those frames aren't on every tap either (e.g. not on Chassis CAN on a 2022 Model 3, [#46](https://github.com/hypery11/flipper-tesla-fsd/pull/46)), and no test report has confirmed the ESP32 readout on a 3/Y yet.
 
 > [!IMPORTANT]
 > The device boots in **Listen-Only mode** by default and will **not transmit any CAN frames** until the user explicitly switches to Active mode via the physical button or Web Dashboard UI. This ensures safe first-boot behavior. The chosen mode is saved and restored on the next boot; a factory reset returns it to Listen-Only.
@@ -37,7 +37,7 @@ Most CAN protocol handling from hypery11's Flipper Zero implementation (`fsd_han
 - In-car Autopark pause: all TX stops while the car runs Autopark and resumes when it ends (#180)
 - HW-based AP/DAS mapping for Legacy/HW3 vs HW4 signal layouts
 - ISA speed warning chime suppression (HW4 only)
-- BMS data parsing logic (voltage, current, SOC, temperature) — currently not reliable in real use
+- BMS data parsing logic (voltage, current, SOC, temperature) — Model 3/Y frames; wrong values on S/X, not yet confirmed on the ESP32
 - Battery precondition trigger
 - CRC/checksum recalculation after frame modification
 - DLC length validation on all handlers; frames with DLC > 8 are dropped in the driver, and extended / remote frames never reach a handler
@@ -53,7 +53,7 @@ Most CAN protocol handling from hypery11's Flipper Zero implementation (`fsd_han
 - **Real-time WebSocket push** — 1 Hz state updates via WebSocket on port 81
 - **FSD Status Panel** — FSD active/waiting, Listen-Only/Active mode, HW version, NAG Killer state
 - **Battery SOC Ring** — animated circular progress bar with color coding (green >60%, yellow >30%, red ≤30%)
-- **BMS Live Data UI hooks** — fields exist in UI/API, but BMS section is currently not working reliably on tested vehicle setup
+- **BMS Live Data UI hooks** — fields exist in UI/API; Model 3/Y frames only (wrong on S/X), not yet confirmed on the ESP32
 - **CAN Bus Stats** — RX frame count, TX modified count, CAN errors, frames/second
 - **HTTP CAN Log Stream** — phone-friendly candump collection via dashboard button; device streams CAN frames over HTTP on port 82 and the browser saves the collected `.dump` file on Stop
 - **Web Controls** — toggle buttons and selectors for:
@@ -124,7 +124,7 @@ Auto-detect picks the source. If it's wrong, pin the car with the Hardware selec
 | **Battery Precondition** | `0x082` | Preheat trigger, re-sent every 500 ms while the dashboard **Precondition** switch is on (off by default) |
 | **TLSSC Restore** | `0x331` | Recovers stop sign / traffic light control on VIN-banned cars |
 | **Continuous AP** | `0x229` | HW3/Legacy, off by default: after AP drops during a turn-signal lane change, re-engages it with a right-stalk double press (brake or full stalk-up cancels) |
-| **BMS Dashboard** | `0x132`/`0x292`/`0x312` | Parsing/UI path implemented, but currently not working reliably |
+| **BMS Dashboard** | `0x132`/`0x292`/`0x312` | Model 3/Y frames; wrong values on S/X, not yet confirmed on the ESP32 |
 | **OTA Protection** | `0x318` | Auto-stops TX when OTA update detected unless Ignore OTA is enabled |
 | **HW Auto-Detect** | `0x398` | Reads GTW_carConfig for HW version |
 | **Listen-Only Mode** | — | Default on first boot, passive monitoring only; the chosen mode is saved and restored on the next boot |
@@ -307,7 +307,7 @@ pio device monitor -b 115200
 ### Expected Boot Output
 ```
 ============================
- Tesla FSD Unlock — ESP32
+ Tesla Mod — ESP32
 ============================
 [FSD] Build: Apr  8 2026 18:59:17
 [CAN] Driver: ESP32 TWAI (M5Stack ATOM Lite + ATOMIC CAN Base)
@@ -424,9 +424,9 @@ This table is informational from field reports/upstream notes. The ESP32 code it
 | Tesla Firmware | HW3 | HW4 | Notes |
 |----------------|-----|-----|-------|
 | ≤ 2026.2.x | ✅ | ✅ | Full support |
-| 2026.2.9.x | ✅ | ⚠️ | HW4 broken on these versions, use HW3 mode |
-| 2026.8.3 | ✅ | ⚠️ | Not tested on HW4 |
-| 2026.8.6+ | ⚠️ | ❌ | Region lock added — FSD model present but won't activate in some regions |
+| 2026.8.3 | ✅ | ✅ | HW4 reported working on a Model Y 2025 in Germany ([#80](https://github.com/hypery11/flipper-tesla-fsd/issues/80)) |
+| 2026.8.6 | ⚠️ | ❌ | HW4 injection path broken on this build — use Force HW3. Region lock applies too (next row) |
+| 2026.8.6+ | ⚠️ | ⚠️ | Region lock — FSD neural net refuses to run in some regions. Pull the SIM and use Force FSD |
 | 2026.14.x and newer | ❌ | ❌ | FSD unlock blocked by the activation preflight and an off-CAN region lock; nag killer / TLSSC still work — see [#168](https://github.com/hypery11/flipper-tesla-fsd/discussions/168) |
 
 > **⚠️ Strongly recommended: disable automatic OTA updates** to stay on a compatible firmware version.
@@ -481,7 +481,7 @@ GPL-3.0 — Same as the upstream projects.
 
 ## Disclaimer
 
-> **⚠️ Tested on Model 3 2022 HW3 only. Other models/years/HW revisions are not yet validated.**
+> **⚠️ Only the cars listed at the top of this page and in the main README's Compatibility table have test reports. Anything else is unvalidated.**
 
 This project is for **educational and research purposes only**. Modifying vehicle CAN bus communication may:
 - Void your vehicle warranty

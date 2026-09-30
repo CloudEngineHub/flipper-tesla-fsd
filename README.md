@@ -100,7 +100,7 @@
 
 ### Extra unlocks (v2.16+, opt-in, default OFF)
 
-ESP32 dashboard only for now — the Flipper menu doesn't have these toggles (its HW4 path sets the summon bit, bit47, on every mux1 frame).
+ESP32 dashboard only for now — the Flipper menu doesn't have these toggles, so a Flipper never sets the summon bit (bit47).
 
 - **Summon EU Unlock** — `0x3FD` mux1: clears bit19 (EU AP restriction) and sets bit47 (summon-enable) to expose Summon on EU-restricted cars
 - **Continue on Green** — `0x3FD` mux0 bit39 `UI_fsdContinueOnGreenWithCIPV` — continue through a green light behind a lead car without a stalk confirmation; pairs with TLSSC

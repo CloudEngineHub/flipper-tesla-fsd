@@ -103,7 +103,7 @@
 
 ### 额外解锁（v2.16+，可选，默认关闭）
 
-目前只在 ESP32 仪表板上 — Flipper 菜单还没有这些开关（它的 HW4 路径会在每个 mux1 frame 设 summon bit，也就是 bit47）。
+目前只在 ESP32 仪表板上 — Flipper 菜单还没有这些开关，所以 Flipper 不会设 summon bit（bit47）。
 
 - **Summon EU Unlock** — `0x3FD` mux1：清掉 bit19（EU AP 限制）并设 bit47（summon-enable），在受 EU 限制的车上开放召唤（Summon）
 - **Continue on Green** — `0x3FD` mux0 bit39 `UI_fsdContinueOnGreenWithCIPV` — 在有前车的情况下，不用拨杆确认就通过绿灯；搭配 TLSSC 使用

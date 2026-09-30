@@ -291,11 +291,9 @@ bool fsd_handle_autopilot_frame(FSDState* state, CANFRAME* frame, uint32_t now_m
                 fsd_set_bit(frame, 48, false);
                 fsd_set_bit(frame, 50, false);
             }
-            // HW4 sets bit47 (summon enable) unconditionally here (pre-existing),
-            // so the summon_unlock toggle is effectively always-on for HW4 on this
-            // build. The toggle's real effect is on the HW3 path above; ESP32 gates
-            // both HW3 and HW4. Reconciling this divergence is a follow-up.
-            fsd_set_bit(frame, 47, true);
+            if(state->summon_unlock) {
+                fsd_set_bit(frame, 47, true);   // summon enable (ev-open-can-tools summon-eu-unlock)
+            }
             if(state->enhanced_autopilot) {
                 fsd_set_bit(frame, 46, true);
             }

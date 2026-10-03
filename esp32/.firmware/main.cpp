@@ -375,7 +375,9 @@ static void apply_can1_repo_filter() {
     if (!g_can[1] || !g_can_ok[1]) return;
 
     FSDState s = state_snapshot();
-    if (!CAN1_REPO_FILTER_ENABLED || s.op_mode != OpMode_Active) {
+    // Listen-Only filters belong to the capture stream, including accept-all.
+    if (s.op_mode != OpMode_Active) return;
+    if (!CAN1_REPO_FILTER_ENABLED) {
         g_can[1]->setAcceptanceFilters(nullptr, 0);
         return;
     }
@@ -430,6 +432,8 @@ static const char *can1_repo_filter_status(const FSDState &s) {
 
 static void sync_http_can_stream_filter_if_needed() {
     static bool initialized = false;
+    static OpMode last_mode = (OpMode)255;
+    static bool last_can_ok[CAN_ACTIVE_BUS_COUNT] = {};
     static bool last_active[CAN_ACTIVE_BUS_COUNT] = {};
     static uint8_t last_count[CAN_ACTIVE_BUS_COUNT] = {};
     static uint32_t last_ids[CAN_ACTIVE_BUS_COUNT][6] = {};
@@ -450,7 +454,9 @@ static void sync_http_can_stream_filter_if_needed() {
                       (!bus_filter || bus == want_bus);
         uint8_t target_count = active ? count : 0;
 
-        bool changed = !initialized ||
+        bool can_ok = g_can_ok[i] && g_can[i] != nullptr;
+        bool changed = !initialized || last_mode != s.op_mode ||
+                       last_can_ok[i] != can_ok ||
                        last_active[i] != active ||
                        last_count[i] != target_count;
         for (uint8_t j = 0; !changed && j < target_count; j++) {
@@ -462,6 +468,7 @@ static void sync_http_can_stream_filter_if_needed() {
         if (g_can_ok[i] && g_can[i]) {
             g_can[i]->setAcceptanceFilters(active ? ids : nullptr, target_count);
         }
+        last_can_ok[i] = can_ok;
         last_active[i] = active;
         last_count[i] = target_count;
         for (uint8_t j = 0; j < 6; j++) {
@@ -469,6 +476,7 @@ static void sync_http_can_stream_filter_if_needed() {
         }
     }
     initialized = true;
+    last_mode = s.op_mode;
 
     if (!listen_only && filters_changed) {
         // Leaving Listen-Only clears any stream filter; then restore the active

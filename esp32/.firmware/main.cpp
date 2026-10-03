@@ -1495,9 +1495,10 @@ static void process_frame(CanBusId bus, const CanFrame &frame) {
     }
 
     // Fallback HW detection when 0x398 is unavailable on the tapped bus.
-    // Prefer explicit HW4 DAS_status (0x39B) when present. If the tap only sees
-    // HW3-style DAS_status on 0x399, classify as HW3 after repeated plausible
-    // samples so 0x399 can be parsed for AP/NAG gating.
+    // 0x39B is a DAS_status source for HW4 and some Highland/HW3 variants, so
+    // it is not a reliable HW4 marker by itself. If the tap sees HW3-style
+    // DAS_status on 0x399, classify as HW3 after repeated plausible samples; if
+    // only 0x3FD is present, use a larger count as a conservative HW3 fallback.
     static uint32_t hw_fallback_3fd_count = 0;
     static uint32_t hw_fallback_399_count = 0;
     // NOTE (#110/#122): beta.20 upgraded a locked-in HW3 guess to HW4 whenever a
@@ -1509,10 +1510,6 @@ static void process_frame(CanBusId bus, const CanFrame &frame) {
     if (state_snapshot().hw_version == TeslaHW_Unknown) {
         if (frame.id == CAN_ID_AP_LEGACY) {
             apply_detected_hw(TeslaHW_Legacy, "fallback:0x3EE");
-        } else if (frame.id == CAN_ID_DAS_STATUS_HW4 && frame.dlc == CAN_FRAME_MAX_DATA_LEN) {
-            apply_detected_hw(TeslaHW_HW4, "fallback:0x39B");
-            hw_fallback_3fd_count = 0;
-            hw_fallback_399_count = 0;
         } else if (frame_looks_like_hw3_das_status(frame)) {
             hw_fallback_399_count++;
             if (hw_fallback_399_count >= 2u)

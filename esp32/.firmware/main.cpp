@@ -1805,6 +1805,10 @@ void loop() {
         // CANErr is the combined count; mostly controller RX-queue drops on a
         // busy bus, so print the per-cause split beside it.
         CanErrorSplit err = can_error_split(g_can, CAN_ACTIVE_BUS_COUNT);
+        // HW3 pass-through (#209): the car's own profile is what goes out.
+        int profile = s.speed_profile;
+        if (s.hw_version == TeslaHW_HW3 && !s.hw3_speed_override && s.hw3_profile_seen)
+            profile = s.hw3_car_profile;
         Serial.printf(
             "[STA] HW:%-6s AP:%-4s FSD_UI:%-4s Unlock:%-3s NAG:%-3s Echo:%lu OTA:%-3s "
             "Profile:%d  RX:%lu TX:%lu Mod:%lu CANErr:%lu (RXmissed:%lu Bus:%lu TXfail:%lu)\n",
@@ -1815,7 +1819,7 @@ void loop() {
             s.nag_killer      ? "ON"         : "off",
             (unsigned long)s.nag_echo_count,
             s.tesla_ota_in_progress ? "YES"  : "no",
-            s.speed_profile,
+            profile,
             (unsigned long)s.rx_count,
             (unsigned long)s.tx_count,
             (unsigned long)s.frames_modified,

@@ -106,6 +106,7 @@ ESP32 dashboard only for now — the Flipper menu doesn't have these toggles, so
 - **Right-Hand Drive (RHD) override** — `0x3F8` bit41 `UI_drivingSide` = RHD. RHD markets only
 - **AP branch/tier selector** — `0x3FD` mux1 bits 40-42 `UI_apmv3Branch`: Live / Stage / Dev / Stage2 / EAP / Demo. Experimental, non-persistent UI hint — reverts when injection stops
 - **Adjustable Track Mode** — `0x313` `UI_trackModeSettings`: Handling Balance + Stability Assist + post-drive cooling, checksum recomputed. Vehicle bus; defaults to rotation 100 / stability 30%, and works on non-Performance trims too
+- **Acceleration Mode (experimental)** — `0x334` `UI_powertrainControl` `UI_pedalMap` (byte0 bits 5-6): Off (pass-through) / Chill / Sport / Performance, written into the car's own frame with the counter kept and the checksum recomputed. A new mode only switches at standstill; Off, or a mode change on the touchscreen while driving, goes back to pass-through at once. The touchscreen keeps showing your own setting. `0x334` is on Vehicle and Chassis CAN, not OBD-II Party CAN. It changes the pedal map only, not the drive unit's power rating. Not car-validated yet. Idea from [ColinM-sys/tesla-can-boost](https://github.com/ColinM-sys/tesla-can-boost) ([#211](https://github.com/hypery11/flipper-tesla-fsd/issues/211))
 
 ### Settings (runtime toggles)
 
@@ -319,6 +320,7 @@ Single-bus read-modify-retransmit on Party CAN. No MITM, no second bus tap.
 | `0x7FF` | `GTW_carConfig` | TX | GTW Config Replay + active tier override |
 | `0x082` | `UI_tripPlanning` | TX | Battery preconditioning trigger |
 | `0x313` | `UI_trackModeSettings` | TX | Track Mode — handling balance / stability / cooling (checksum recomputed; Vehicle bus) |
+| `0x334` | `UI_powertrainControl` | TX | Acceleration Mode — `UI_pedalMap` byte0 bits 5-6, set at standstill only (checksum recomputed, counter kept; Vehicle / Chassis bus) |
 | `0x398` | `GTW_carConfig` | RX | HW version detection |
 | `0x318` | `GTW_carState` | RX | OTA detection (auto-suspend TX) |
 | `0x399` | `DAS_status` (HW3/Legacy) / `ISA_speedLimit` (HW4) | RX/TX | HW-dispatched: pre-Highland HW3 reads as DAS_status (AP state + hands-on); HW4 keeps the chime-suppression write path |

@@ -76,6 +76,7 @@ Most CAN protocol handling from hypery11's Flipper Zero implementation (`fsd_han
   - Telemetry Off (experimental) (clears reachable telemetry-enable flags on `0x3F8` / `0x3FD` mux1)
   - AP Branch/Tier selector (experimental apmv3 — Live / Stage / Dev / Stage2 / EAP / Demo, or Off)
   - Track Mode (experimental) (adjustable rotation / stability / cooling via `0x313`)
+  - Acceleration Mode (experimental) (Off / Chill / Sport / Performance pedal map on `0x334`, switches at standstill; shows the car's map and what goes out)
   - Hardware override selector (Auto-detect / Force HW4 / Force HW3 / Force Legacy)
 - **OTA Warning Banner** — pulsing red alert when vehicle OTA update is detected (same banner style for the in-car Autopark TX pause)
 - **CAN Errors** — combined controller error count with an RX missed / bus / TX fail split (mostly RX-queue drops on a busy bus, not failed sends)
@@ -122,6 +123,7 @@ Auto-detect picks the source. If it's wrong, pin the car with the Hardware selec
 | **RHD Override** | `0x3F8` | Right-Hand Drive driving-side override (bits 40-41); RHD markets only |
 | **Telemetry Off** | `0x3F8` / `0x3FD` mux1 | Experimental; clears reachable telemetry-enable flags |
 | **Track Mode** | `0x313` | Experimental adjustable Track Mode (rotation / stability / cooling) |
+| **Acceleration Mode** | `0x334` | Experimental pedal-map override (`UI_pedalMap` byte0 bits 5-6), off by default. Rewrites the car's own frame (counter kept, checksum recomputed) and only switches at standstill (fresh `0x257` ≤ 1 km/h, or `0x118` gear P); Off or a touchscreen change while driving returns to pass-through at once. Needs a Vehicle or Chassis CAN tap. Idea from [ColinM-sys/tesla-can-boost](https://github.com/ColinM-sys/tesla-can-boost) ([#211](https://github.com/hypery11/flipper-tesla-fsd/issues/211)) |
 | **HW Override** | — | Manual Auto-detect / Force HW4 / Force HW3 / Force Legacy selector |
 | **Battery Precondition** | `0x082` | Preheat trigger, re-sent every 500 ms while the dashboard **Precondition** switch is on (off by default) |
 | **TLSSC Restore** | `0x331` | Recovers stop sign / traffic light control on VIN-banned cars |

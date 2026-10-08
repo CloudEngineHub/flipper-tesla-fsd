@@ -10,6 +10,7 @@
  */
 
 #include "fsd_types.h"  // TeslaHWVersion, OpMode, CANFRAME
+#include "fsd_perf.h"   // FSDPerf — read-only performance read-out state (ESP32 dashboard)
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -69,6 +70,18 @@ typedef struct FSDState {
     float soc_percent;
     int8_t batt_temp_min_c;
     int8_t batt_temp_max_c;
+
+    // live wheel speeds (read-only sniff, 0x175 ESP_wheelSpeeds — Party CAN)
+    bool wheel_speed_seen;
+    float wheel_speed_fl_kph;
+    float wheel_speed_fr_kph;
+    float wheel_speed_rl_kph;
+    float wheel_speed_rr_kph;
+
+    // Read-only performance read-out (ESP32 web dashboard). Derived only from
+    // frames already received (0x257 speed, 0x175 wheels, 0x312 batt temp);
+    // transmits nothing. Inert on the Flipper build.
+    FSDPerf perf;
 
     // precondition trigger (writes 0x082 periodically)
     bool precondition;

@@ -123,6 +123,18 @@
 #define SIG_BMS_TEMP_MAX_BYTE               5
 #define SIG_BMS_TEMP_OFFSET                40
 
+// ESP_wheelSpeeds (0x175) — four 13-bit LE wheel speeds, factor 0.04 km/h,
+// offset 0 (opendbc tesla_model3_party BO_373). Bit positions in the 64-bit LE
+// data word: FrL 0, FrR 13, ReL 26, ReR 39. Checksum byte7 / counter byte6
+// use a CRC we don't model, so the parser gates on a plausibility range only.
+#define SIG_ESP_WHEELSPD_SCALE           0.04f
+#define SIG_ESP_WHEELSPD_MASK           0x1FFFu   // 13 bits
+#define SIG_ESP_WHEELSPD_FL_SHIFT           0
+#define SIG_ESP_WHEELSPD_FR_SHIFT          13
+#define SIG_ESP_WHEELSPD_RL_SHIFT          26
+#define SIG_ESP_WHEELSPD_RR_SHIFT          39
+#define SIG_ESP_WHEELSPD_MAX_KPH        327.0f    // 13-bit*0.04 full-scale 327.64 = SNA/invalid
+
 // Trip planning / precondition (0x082)
 #define SIG_TRIP_PLANNING_FLAGS_BYTE        0
 #define SIG_TRIP_PLANNING_PRECONDITION   0x05u

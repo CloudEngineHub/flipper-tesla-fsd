@@ -223,3 +223,29 @@
 #define SIG_DAS_CONTROL_COUNTER_MASK     0x07u
 #define SIG_DAS_CONTROL_COUNTER_KEEP_MASK 0x1Fu
 #define SIG_DAS_CONTROL_CHECKSUM_BYTE       7
+
+// ── Acceleration Mode override (#211) ───────────────────────────────────────
+// UI_powertrainControl (0x334), little-endian, GTW-forwarded UI frame, 500 ms:
+//   UI_pedalMap: bit5|2 (0 CHILL, 1 SPORT, 2 PERFORMANCE); bit7 is a separate
+//   signal (UI_enableRegenBackfill on newer firmware) and is kept.
+//   UI_powertrainControlCounter: bit52|4 (byte6 high nibble), kept as received.
+//   UI_powertrainControlChecksum: byte7, additive over byte0..6 + id low/high
+//   (matches all 219 0x334 frames in the HW3 + HW4 Model 3 captures).
+#define SIG_UI_PEDAL_MAP_BYTE               0
+#define SIG_UI_PEDAL_MAP_SHIFT              5
+#define SIG_UI_PEDAL_MAP_MASK            0x03u
+#define SIG_UI_PEDAL_MAP_MAX                2u   // PERFORMANCE; 3 is undefined
+#define SIG_UI_POWERTRAIN_CHECKSUM_BYTE     7
+
+// DI_speed (0x257): DI_vehicleSpeed bit12|12, factor 0.08, offset -40 kph.
+// Raw 4062 = 284.96 kph is the max valid value; 4095 is SNA.
+#define SIG_DI_SPEED_RAW_MAX_VALID       4062u
+
+// DI_systemStatus (0x118), little-endian:
+//   DI_systemStatusChecksum: byte0, additive over byte1..7 + id low/high.
+//   DI_gear: bit21|3 (0 INVALID, 1 P, 2 R, 3 N, 4 D, 7 SNA).
+#define SIG_DI_STATUS_CHECKSUM_BYTE         0
+#define SIG_DI_GEAR_BYTE                    2
+#define SIG_DI_GEAR_SHIFT                   5
+#define SIG_DI_GEAR_MASK                 0x07u
+#define SIG_DI_GEAR_P                       1u

@@ -109,6 +109,7 @@
 - **右駕（RHD）覆寫** — `0x3F8` bit41 `UI_drivingSide` = RHD。僅限右駕市場
 - **AP 分支／層級選擇器** — `0x3FD` mux1 bits 40-42 `UI_apmv3Branch`：Live / Stage / Dev / Stage2 / EAP / Demo。實驗性，非持久化的 UI 提示 — 停止注入後即還原
 - **可調 Track Mode** — `0x313` `UI_trackModeSettings`：操控平衡（Handling Balance）+ 穩定輔助（Stability Assist）+ 收車後冷卻，校驗和會重算。走 Vehicle 匯流排；預設為 rotation 100 / stability 30%，非 Performance 車型也可用
+- **加速模式（實驗性）** — `0x334` `UI_powertrainControl` 的 `UI_pedalMap`（byte0 bits 5-6）：Off（原樣轉送）/ Chill / Sport / Performance，寫進車輛自己的 frame，counter 保留、校驗和重算。新模式只在靜止時切換；切回 Off，或行駛中在中控螢幕上改了模式，會立刻回到原樣轉送。中控螢幕仍顯示你自己的設定。`0x334` 在 Vehicle 和 Chassis CAN 上，不在 OBD-II 的 Party CAN 上。只改踏板對應，不改驅動單元的額定功率。尚未實車驗證。點子來自 [ColinM-sys/tesla-can-boost](https://github.com/ColinM-sys/tesla-can-boost)（[#211](https://github.com/hypery11/flipper-tesla-fsd/issues/211)）
 
 ### 設定（執行時開關）
 
@@ -322,6 +323,7 @@ pio run -e m5stack-atom    # 或：esp32-lilygo、waveshare-s3-can、esp32-mcp25
 | `0x7FF` | `GTW_carConfig` | TX | GTW Config Replay + 主動層級覆寫 |
 | `0x082` | `UI_tripPlanning` | TX | 電池預熱觸發 |
 | `0x313` | `UI_trackModeSettings` | TX | Track Mode — 操控平衡／穩定／冷卻（校驗和重算；Vehicle 匯流排） |
+| `0x334` | `UI_powertrainControl` | TX | 加速模式 — `UI_pedalMap` byte0 bits 5-6，只在靜止時設定（校驗和重算、counter 保留；Vehicle / Chassis 匯流排） |
 | `0x398` | `GTW_carConfig` | RX | HW 版本偵測 |
 | `0x318` | `GTW_carState` | RX | OTA 偵測（自動暫停 TX） |
 | `0x399` | `DAS_status`（HW3/Legacy）/ `ISA_speedLimit`（HW4） | RX/TX | 依 HW 分派：pre-Highland HW3 讀為 DAS_status（AP 狀態＋手扶）；HW4 保留提示音抑制寫入路徑 |

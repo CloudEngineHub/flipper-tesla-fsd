@@ -20,6 +20,13 @@ typedef enum {
     SpeedLimitSource_Acc,
 } SpeedLimitSource;
 
+// Acceleration Mode override setting (#211). OFF = pass-through; otherwise the
+// UI_pedalMap value sent on 0x334 is (mode - 1): 0 CHILL, 1 SPORT, 2 PERFORMANCE.
+#define ACCEL_MODE_OFF         0u
+#define ACCEL_MODE_CHILL       1u
+#define ACCEL_MODE_SPORT       2u
+#define ACCEL_MODE_PERFORMANCE 3u
+
 typedef struct FSDState {
     TeslaHWVersion hw_version;
     // Manual HW selection (#110). TeslaHW_Unknown = auto-detect (default); any
@@ -80,6 +87,23 @@ typedef struct FSDState {
     uint8_t track_stability_pct; // Stability Assist 0-100; default 30 (safety margin + fun)
     bool track_post_cooling;     // UI_trackPostCooling, default false
     bool track_cmp_overclock;    // UI_trackCmpOverclock (max cooling), default false
+
+    // --- Acceleration Mode override (0x334 UI_powertrainControl, #211, ESP32) ---
+    // Rewrite UI_pedalMap (byte0 bits 5-6) on the car's own 0x334, keep its
+    // counter, recompute the checksum. A new value latches only at standstill;
+    // Off, a blocked TX gate or a touchscreen change while moving drop back to
+    // pass-through at once. The touchscreen keeps showing the driver's mode.
+    uint8_t accel_mode;            // setting: ACCEL_MODE_OFF (default) / _CHILL / _SPORT / _PERFORMANCE
+    uint8_t accel_mode_applied;    // latched value going out; ACCEL_MODE_OFF = pass-through
+    bool accel_mode_pending;       // setting != latch, waiting for standstill
+    uint8_t accel_car_map;         // car's own UI_pedalMap as last received (0..2)
+    bool accel_car_seen;           // a valid 0x334 has been parsed
+    uint32_t accel_frames_modified;// 0x334 frames rewritten
+    uint32_t accel_bad_frames;     // 0x334 left alone: wrong DLC, bad checksum or pedal map 3
+    uint16_t di_speed_raw;         // 0x257 DI_vehicleSpeed raw (4095 = SNA); kph = raw*0.08-40, signed
+    uint8_t di_gear;               // 0x118 DI_gear (1 = P, 7 = SNA)
+    bool di_gear_seen;             // a 0x118 with a valid checksum has been parsed
+    uint32_t last_gear_tick_ms;    // ms clock of that frame (standstill-gate freshness)
 
     uint8_t traction_ctrl_mode;  // 0..7 (from 0x118)
     uint8_t rear_defrost_state;  // 0=sna 1=on 2=off (from 0x343)

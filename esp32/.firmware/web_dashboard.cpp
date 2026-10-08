@@ -552,6 +552,18 @@ input:checked+.sl2:before{transform:translateX(20px);background:#fff}
   </div>
   <div class="row" style="display:block">
     <div style="display:flex;align-items:center;justify-content:space-between">
+      <span class="lbl">Acceleration Mode (experimental)<br><small style="color:var(--muted)">Rewrites the pedal map on 0x334. The touchscreen keeps showing your own setting; a new mode only switches at standstill.</small></span>
+      <select id="selAccel" onchange="cmd('accel_mode',parseInt(this.value,10))">
+        <option value="0">Off</option>
+        <option value="1">Chill</option>
+        <option value="2">Sport</option>
+        <option value="3">Performance</option>
+      </select>
+    </div>
+    <div id="accelSt" style="font-size:12px;color:var(--muted);margin-top:4px">--</div>
+  </div>
+  <div class="row" style="display:block">
+    <div style="display:flex;align-items:center;justify-content:space-between">
       <span class="lbl">Track Mode (experimental)<br><small style="color:var(--muted)">Experimental &mdash; Vehicle-bus; not car-validated. Defaults to rear-biased (rotation 100) + 30% stability &mdash; fun with a safety margin. Raise stability for stock feel.</small></span>
       <label class="sw"><input type="checkbox" id="swTrkMode" onchange="cmd('track_mode_inject',this.checked)"><span class="sl2"></span></label>
     </div>
@@ -864,6 +876,7 @@ function updateControlsSummary(d){
   if(d.tlssc_restore)items.push('TLSSC');
   if(d.precondition)items.push('Precond');
   if(d.assist_tlssc_bit38)items.push('TLSSC bit38');
+  if(d.accel_mode>0)items.push('Accel '+(['','Chill','Sport','Performance'][d.accel_mode]||'?'));
   if(d.display_enabled)items.push('Display');
   if(d.can_dump)items.push('CAN Dump');
   e.textContent=items.length?items.join(', '):'Expand to setup';
@@ -1062,6 +1075,19 @@ function upd(d){
   if(document.getElementById('swTelOff')) document.getElementById('swTelOff').checked=d.assist_telemetry_off;
   var apmv3Sel=document.getElementById('selApmv3');
   if(apmv3Sel && d.apmv3_branch!==undefined && document.activeElement!==apmv3Sel) apmv3Sel.value=String(d.apmv3_branch);
+  // Acceleration Mode (#211): setting + car map -> map going out
+  var acSel=document.getElementById('selAccel');
+  if(acSel && d.accel_mode!==undefined && document.activeElement!==acSel) acSel.value=String(d.accel_mode);
+  var acSt=document.getElementById('accelSt');
+  if(acSt && d.accel_car_map!==undefined){
+    var ACM=['CHILL','SPORT','PERFORMANCE'], at;
+    if(d.accel_car_map<0) at=d.accel_bad>0?'0x334 not recognised ('+d.accel_bad+' rejected)':'no 0x334 on this bus yet';
+    else if(d.accel_sent_map===d.accel_car_map) at='Car '+ACM[d.accel_car_map]+' \u00b7 pass-through';
+    else at='Car '+ACM[d.accel_car_map]+' \u2192 sent '+ACM[d.accel_sent_map];
+    if(d.accel_pending) at+=' \u00b7 waiting for standstill';
+    else if(d.accel_mode>0 && !d.tx_allowed) at+=' \u00b7 TX off';
+    acSt.textContent=at;
+  }
   if(document.getElementById('swTrkMode')) document.getElementById('swTrkMode').checked=d.track_mode_inject;
   if(document.getElementById('trkRot')&&document.activeElement.id!=='trkRot'&&d.track_rotation_pct!==undefined){document.getElementById('trkRot').value=d.track_rotation_pct;var _tr=document.getElementById('trkRotV');if(_tr)_tr.textContent=d.track_rotation_pct;}
   if(document.getElementById('trkStab')&&document.activeElement.id!=='trkStab'&&d.track_stability_pct!==undefined){document.getElementById('trkStab').value=d.track_stability_pct;var _ts=document.getElementById('trkStabV');if(_ts)_ts.textContent=d.track_stability_pct;}
@@ -1680,6 +1706,14 @@ static String build_json() {
     j += "\"track_stability_pct\":"; j += (int)state.track_stability_pct;  j += ',';
     j += "\"track_post_cooling\":"; j += state.track_post_cooling        ? "true" : "false"; j += ',';
     j += "\"track_cmp_overclock\":"; j += state.track_cmp_overclock       ? "true" : "false"; j += ',';
+    // Acceleration Mode (#211): setting, car's own 0x334 pedal map and the map
+    // going out (-1 = no valid 0x334 yet), pending = waiting for standstill.
+    j += "\"accel_mode\":";     j += (int)state.accel_mode;               j += ',';
+    j += "\"accel_car_map\":";  j += state.accel_car_seen ? (int)state.accel_car_map : -1; j += ',';
+    j += "\"accel_sent_map\":"; j += fsd_accel_sent_map(&state);           j += ',';
+    j += "\"accel_pending\":";  j += state.accel_mode_pending            ? "true" : "false"; j += ',';
+    j += "\"accel_bad\":";      j += state.accel_bad_frames;              j += ',';
+    j += "\"tx_allowed\":";     j += fsd_can_transmit(&state)            ? "true" : "false"; j += ',';
     j += "\"firmware_14x_warning\":"; j += state.firmware_14x_warning  ? "true" : "false"; j += ',';
 #if defined(BOARD_TTGO_DISPLAY)
     j += "\"display_enabled\":"; j += state.display_enabled             ? "true" : "false"; j += ',';
@@ -2214,6 +2248,23 @@ static void ws_event(uint8_t num, WStype_t type,
             saved = *g_state;
             state_exit();
             Serial.printf("[Web] AP Branch/Tier: %d\n", want);
+            prefs_save(&saved);
+        }
+    } else if (strstr(buf, "\"accel_mode\"")) {
+        // Acceleration Mode override (#211): 1 Chill / 2 Sport / 3 Performance,
+        // anything else = Off (pass-through). The handler latches a new value
+        // only at standstill; Off applies on the next 0x334.
+        if (vptr) {
+            while (*vptr == ' ' || *vptr == ':') vptr++;
+            int sel = atoi(vptr);
+            uint8_t want = (sel >= (int)ACCEL_MODE_CHILL && sel <= (int)ACCEL_MODE_PERFORMANCE)
+                               ? (uint8_t)sel : (uint8_t)ACCEL_MODE_OFF;
+            FSDState saved;
+            state_enter();
+            g_state->accel_mode = want;
+            saved = *g_state;
+            state_exit();
+            Serial.printf("[Web] Acceleration Mode: %u\n", (unsigned)want);
             prefs_save(&saved);
         }
     } else if (strstr(buf, "\"track_mode_inject\"")) {

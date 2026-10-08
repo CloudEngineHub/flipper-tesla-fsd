@@ -1,3 +1,7 @@
+## 2.16-beta.37 — read-only performance panel
+
+- **ESP32: a read-only Performance card on the dashboard.** Acceleration timers (0-50, 0-60 mph, 0-100 km/h) and a braking 100-0 with a per-session best, estimated longitudinal G from dv/dt of speed (labelled "est.", no IMU), wheel slip % from 0x175, and battery pack temp banding + power kW from the BMS frames. It transmits nothing — every value is derived from frames already received, with no new TX path. Hidden by default. The timers and est. G work on any tap carrying 0x257; wheel slip needs Party CAN (0x175) and temp/power need a Vehicle-CAN BMS tap. (PR #216)
+
 ## 2.16-beta.36 — Acceleration Mode, T-2CAN capture filters
 
 - **ESP32: opt-in Acceleration Mode (experimental, #211).** Off / Chill / Sport / Performance, written into the pedal map of the car's own 0x334 (UI_powertrainControl) with the counter kept and the checksum recomputed. A new mode only switches at standstill. Off, a paused TX gate or a touchscreen change while driving go straight back to pass-through. The touchscreen keeps showing your own setting, so the dashboard shows the car's map next to what goes out. 0x334 is on Vehicle/Chassis CAN, not Party. This changes throttle response, not the Acceleration Boost power rating. Not car-validated yet. Idea from ColinM-sys/tesla-can-boost, thanks @nobless for the pointer. (PR #214)

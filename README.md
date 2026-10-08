@@ -87,6 +87,7 @@
 
 ### Diagnostics (read-only, no FSD required)
 - Live BMS dashboard: pack voltage, current, SoC, temperature range, **energy consumption (Wh/km)**
+- **Performance panel (ESP32 web dashboard, read-only, opt-in):** acceleration / braking timers (0-50, 0-60 mph, 0-100, 100-0 km/h with a per-session best), estimated longitudinal G (dv/dt of speed, no IMU), wheel slip %, and pack temperature / power. Speed and est. G work on any tap carrying `0x257`; wheel slip needs Party CAN (`0x175`); temperature and power need the BMS frames on a Vehicle-CAN tap. Transmits nothing
 - Vehicle speed, steering angle, motor torque, brake state
 - DAS status: autopilot state, hands-on nag level, lane change state, blind spot warning, FCW, vision speed limit
 - GTW autopilot tier readback (NONE/HIGHWAY/ENHANCED/SELF_DRIVING/BASIC)

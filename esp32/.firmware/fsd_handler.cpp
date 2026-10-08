@@ -966,6 +966,30 @@ void fsd_handle_bms_thermal(FSDState *state, const CanFrame *frame) {
     state->bms_seen = true;
 }
 
+// ── Wheel-speeds read-only parser (0x175 ESP_wheelSpeeds, Party CAN) ──────────
+// Four 13-bit LE fields in the 64-bit data word, factor 0.04 km/h. Read-only;
+// feeds the dashboard wheel-slip read-out. The frame carries a CRC we don't
+// model, so instead of a checksum we drop any sample with a field at/above the
+// full-scale SNA value — a cheap plausibility gate for a display metric.
+void fsd_handle_wheel_speeds(FSDState *state, const CanFrame *frame) {
+    if (frame->dlc < 6) return;
+    uint64_t w = 0;
+    for (int i = 0; i < 8; i++) w |= (uint64_t)frame->data[i] << (8 * i);
+    uint16_t fl = (uint16_t)((w >> SIG_ESP_WHEELSPD_FL_SHIFT) & SIG_ESP_WHEELSPD_MASK);
+    uint16_t fr = (uint16_t)((w >> SIG_ESP_WHEELSPD_FR_SHIFT) & SIG_ESP_WHEELSPD_MASK);
+    uint16_t rl = (uint16_t)((w >> SIG_ESP_WHEELSPD_RL_SHIFT) & SIG_ESP_WHEELSPD_MASK);
+    uint16_t rr = (uint16_t)((w >> SIG_ESP_WHEELSPD_RR_SHIFT) & SIG_ESP_WHEELSPD_MASK);
+    float fl_k = fl * SIG_ESP_WHEELSPD_SCALE, fr_k = fr * SIG_ESP_WHEELSPD_SCALE;
+    float rl_k = rl * SIG_ESP_WHEELSPD_SCALE, rr_k = rr * SIG_ESP_WHEELSPD_SCALE;
+    if (fl_k >= SIG_ESP_WHEELSPD_MAX_KPH || fr_k >= SIG_ESP_WHEELSPD_MAX_KPH ||
+        rl_k >= SIG_ESP_WHEELSPD_MAX_KPH || rr_k >= SIG_ESP_WHEELSPD_MAX_KPH) return;
+    state->wheel_speed_fl_kph = fl_k;
+    state->wheel_speed_fr_kph = fr_k;
+    state->wheel_speed_rl_kph = rl_k;
+    state->wheel_speed_rr_kph = rr_k;
+    state->wheel_speed_seen = true;
+}
+
 // ── Precondition trigger ──────────────────────────────────────────────────────
 
 void fsd_build_precondition_frame(CanFrame *frame) {

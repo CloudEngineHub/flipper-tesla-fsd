@@ -54,6 +54,12 @@ Most CAN protocol handling from hypery11's Flipper Zero implementation (`fsd_han
 - **FSD Status Panel** — FSD active/waiting, Listen-Only/Active mode, HW version, NAG Killer state, HW3 speed read-out (car → sent profile and FSD offset, follow distance)
 - **Battery SOC Ring** — animated circular progress bar with color coding (green >60%, yellow >30%, red ≤30%)
 - **BMS Live Data UI hooks** — fields exist in UI/API; Model 3/Y frames only (wrong on S/X), not yet confirmed on the ESP32
+- **Performance Panel (read-only, opt-in)** — a collapsible card (off by default, shown state saved per browser) with live metrics derived only from frames already received — it transmits nothing and adds no TX path:
+  - Acceleration timers 0-50 km/h, 0-60 mph, 0-100 km/h and a braking 100-0 km/h, with a best time kept per session (auto-arm leaving a standstill, lock at the target, reset at the next standstill), from vehicle speed `0x257`
+  - Estimated longitudinal G from dv/dt of vehicle speed (labelled "est." — no IMU), with a rolling accel/brake peak
+  - Wheel slip % (rear avg − front avg) from the four wheel speeds `0x175` (Party CAN)
+  - Pack temperature with normal / warm / hot banding plus cold and hot advisory lines, and instantaneous power (kW) — from the BMS frames (needs a Vehicle-CAN tap)
+  - Speed and est. G work on any tap carrying `0x257`; wheel slip needs Party CAN (`0x175`); temperature and power need the BMS frames on a Vehicle-CAN tap. Motor / inverter / stator temperature is **not** shown — it is not broadcast on CAN in a verified DBC (the drive-inverter temperature frames are on the car's internal Ethernet)
 - **CAN Bus Stats** — RX frame count, TX modified count, CAN errors, frames/second
 - **HTTP CAN Log Stream** — phone-friendly candump collection via dashboard button; device streams CAN frames over HTTP on port 82 and the browser saves the collected `.dump` file on Stop
 - **Web Controls** — toggle buttons and selectors for:

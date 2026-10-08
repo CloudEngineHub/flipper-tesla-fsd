@@ -1091,8 +1091,138 @@ static void test_accel_touchscreen_change(void) {
     CHECK(accel_334(&s, &f, chill, 3000) && pedal_map(&f) == 2, "next stop -> re-applied");
 }
 
+// ── Performance read-out (fsd_perf.h) ──────────────────────────────────────────
+
+// Acceleration-timer state machine: arm leaving standstill, lock at the target,
+// keep the best across runs, reset at the next standstill, and never lock on a
+// run that doesn't reach the target.
+static void test_perf_accel_timer(void) {
+    FSDPerf p;
+    fsd_perf_reset(&p);
+    // Standstill baseline, then launch at t=100ms (clock starts at the standstill
+    // sample's timestamp).
+    fsd_perf_update(&p, 0.0f, 0);
+    fsd_perf_update(&p, 0.5f, 100);
+    fsd_perf_update(&p, 5.0f, 200);      // leaves standstill -> armed, start=100
+    CHECK(p.accel_armed, "accel armed after launch");
+    CHECK(!p.lock_0_50 && p.t_0_50_ms == 0, "no 0-50 lock below target");
+    fsd_perf_update(&p, 55.0f, 4000);    // >= 50 km/h -> lock, 4000-100=3900ms
+    CHECK(p.lock_0_50 && p.t_0_50_ms == 3900, "0-50 locked at 3900ms got %lu",
+          (unsigned long)p.t_0_50_ms);
+    CHECK(p.best_0_50_ms == 3900, "best 0-50 seeded");
+    CHECK(!p.lock_0_60mph, "0-60mph not yet (55<96.56)");
+    fsd_perf_update(&p, 100.0f, 7000);   // >= 96.56 and >= 100 -> both lock, 6900ms
+    CHECK(p.lock_0_60mph && p.t_0_60mph_ms == 6900, "0-60mph locked 6900ms got %lu",
+          (unsigned long)p.t_0_60mph_ms);
+    CHECK(p.lock_0_100 && p.t_0_100_ms == 6900, "0-100 locked 6900ms");
+
+    // Reset at the next standstill, then a quicker run improves the best.
+    fsd_perf_update(&p, 0.0f, 20000);
+    CHECK(!p.accel_armed, "disarmed at standstill");
+    fsd_perf_update(&p, 60.0f, 21000);   // relaunch start=20000, 60>=50 -> 1000ms
+    CHECK(p.t_0_50_ms == 1000 && p.best_0_50_ms == 1000,
+          "0-50 improved to 1000ms (best %lu)", (unsigned long)p.best_0_50_ms);
+
+    // A run that never reaches a target leaves the locks clear.
+    FSDPerf q;
+    fsd_perf_reset(&q);
+    fsd_perf_update(&q, 0.0f, 0);
+    fsd_perf_update(&q, 30.0f, 1000);
+    fsd_perf_update(&q, 0.0f, 2000);
+    CHECK(!q.lock_0_50 && q.best_0_50_ms == 0, "no lock/best when target never reached");
+}
+
+// Braking 100->0 run times from crossing down through 100 km/h to standstill.
+static void test_perf_brake_timer(void) {
+    FSDPerf p;
+    fsd_perf_reset(&p);
+    fsd_perf_update(&p, 110.0f, 0);       // above 100
+    fsd_perf_update(&p, 95.0f, 500);      // crossed down through 100 -> brake start=500
+    CHECK(p.brake_armed, "brake armed crossing 100");
+    fsd_perf_update(&p, 40.0f, 2000);
+    CHECK(!p.lock_100_0, "brake not locked until standstill");
+    fsd_perf_update(&p, 0.0f, 3500);      // standstill -> lock 3500-500=3000ms
+    CHECK(p.lock_100_0 && p.t_100_0_ms == 3000 && p.best_100_0_ms == 3000,
+          "100-0 locked 3000ms got %lu", (unsigned long)p.t_100_0_ms);
+}
+
+// Estimated longitudinal G: sign and magnitude on a synthetic ramp, and the
+// dt guard rejects implausibly short sample gaps.
+static void test_perf_g_estimate(void) {
+    FSDPerf p;
+    fsd_perf_reset(&p);
+    fsd_perf_update(&p, 0.0f, 0);
+    fsd_perf_update(&p, 36.0f, 1000);     // +10 m/s in 1s = +1.0197 g
+    CHECK(p.g_est > 1.0f && p.g_est < 1.04f, "accel g ~1.02 got %.3f", p.g_est);
+    CHECK(p.g_peak > 1.0f && p.g_peak < 1.04f, "g peak captured");
+    fsd_perf_update(&p, 0.0f, 2000);      // -10 m/s in 1s = -1.0197 g
+    CHECK(p.g_est < -1.0f && p.g_est > -1.04f, "brake g ~-1.02 got %.3f", p.g_est);
+    CHECK(p.g_peak_brake < -1.0f, "brake peak captured");
+    float before = p.g_est;
+    fsd_perf_update(&p, 20.0f, 2005);     // dt=5ms < PERF_DT_MIN_MS -> ignored
+    CHECK(p.g_est == before, "sub-20ms sample gap ignored for G");
+}
+
+static void test_perf_wheel_slip(void) {
+    float out = -1.0f;
+    CHECK(fsd_perf_wheel_slip_pct(50.0f, 50.0f, 55.0f, 55.0f, &out) &&
+          out > 9.99f && out < 10.01f, "slip 10%% got %.3f", out);
+    CHECK(fsd_perf_wheel_slip_pct(50.0f, 50.0f, 45.0f, 45.0f, &out) &&
+          out < -9.99f && out > -10.01f, "front faster -> negative slip got %.3f", out);
+    out = 123.0f;
+    CHECK(!fsd_perf_wheel_slip_pct(1.0f, 1.0f, 1.0f, 1.0f, &out) && out == 123.0f,
+          "slip undefined near standstill (out untouched)");
+}
+
+static void test_perf_temp_band(void) {
+    CHECK(fsd_perf_temp_band(-5, PERF_BATT_COLD_C, PERF_BATT_WARM_C, PERF_BATT_HOT_C) == PERF_TEMP_COLD, "cold");
+    CHECK(fsd_perf_temp_band(5, PERF_BATT_COLD_C, PERF_BATT_WARM_C, PERF_BATT_HOT_C) == PERF_TEMP_COLD, "cold boundary");
+    CHECK(fsd_perf_temp_band(20, PERF_BATT_COLD_C, PERF_BATT_WARM_C, PERF_BATT_HOT_C) == PERF_TEMP_NORMAL, "normal");
+    CHECK(fsd_perf_temp_band(40, PERF_BATT_COLD_C, PERF_BATT_WARM_C, PERF_BATT_HOT_C) == PERF_TEMP_WARM, "warm");
+    CHECK(fsd_perf_temp_band(45, PERF_BATT_COLD_C, PERF_BATT_WARM_C, PERF_BATT_HOT_C) == PERF_TEMP_HOT, "hot boundary");
+    CHECK(fsd_perf_temp_band(60, PERF_BATT_COLD_C, PERF_BATT_WARM_C, PERF_BATT_HOT_C) == PERF_TEMP_HOT, "hot");
+}
+
+// 0x175 ESP_wheelSpeeds parser: four 13-bit LE fields, factor 0.04 km/h.
+static void test_perf_wheel_speeds_parse(void) {
+    FSDState s;
+    memset(&s, 0, sizeof(s));
+    CanFrame f;
+    memset(&f, 0, sizeof(f));
+    f.id = CAN_ID_ESP_WHEELSPD;
+    f.dlc = 8;
+    uint16_t fl = 1250, fr = 1250, rl = 1375, rr = 1375;  // 50,50,55,55 km/h
+    uint64_t w = (uint64_t)fl | ((uint64_t)fr << 13) |
+                 ((uint64_t)rl << 26) | ((uint64_t)rr << 39);
+    for (int i = 0; i < 8; i++) f.data[i] = (uint8_t)((w >> (8 * i)) & 0xFF);
+    fsd_handle_wheel_speeds(&s, &f);
+    CHECK(s.wheel_speed_seen, "wheel speeds seen");
+    CHECK(s.wheel_speed_fl_kph > 49.9f && s.wheel_speed_fl_kph < 50.1f,
+          "FL 50 got %.2f", s.wheel_speed_fl_kph);
+    CHECK(s.wheel_speed_rr_kph > 54.9f && s.wheel_speed_rr_kph < 55.1f,
+          "RR 55 got %.2f", s.wheel_speed_rr_kph);
+    float slip = 0.0f;
+    CHECK(fsd_perf_wheel_slip_pct(s.wheel_speed_fl_kph, s.wheel_speed_fr_kph,
+                                  s.wheel_speed_rl_kph, s.wheel_speed_rr_kph, &slip) &&
+          slip > 9.9f && slip < 10.1f, "state slip ~10%% got %.2f", slip);
+    // SNA/full-scale field is rejected (plausibility gate, no checksum modeled).
+    FSDState s2;
+    memset(&s2, 0, sizeof(s2));
+    uint64_t bad = (uint64_t)0x1FFF | ((uint64_t)fr << 13) |
+                   ((uint64_t)rl << 26) | ((uint64_t)rr << 39);
+    for (int i = 0; i < 8; i++) f.data[i] = (uint8_t)((bad >> (8 * i)) & 0xFF);
+    fsd_handle_wheel_speeds(&s2, &f);
+    CHECK(!s2.wheel_speed_seen, "full-scale SNA field rejected");
+}
+
 int main() {
     printf("test_esp32_core: ESP32 firmware handler host tests\n");
+    test_perf_accel_timer();
+    test_perf_brake_timer();
+    test_perf_g_estimate();
+    test_perf_wheel_slip();
+    test_perf_temp_band();
+    test_perf_wheel_speeds_parse();
     test_accel_real_frames();
     test_accel_encode();
     test_accel_off_passthrough();

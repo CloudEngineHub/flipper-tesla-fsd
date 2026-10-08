@@ -1322,6 +1322,9 @@ static void process_frame(CanBusId bus, const CanFrame &frame) {
         state_enter();
         fsd_handle_di_speed(&g_state, &frame);
         g_state.last_speed_tick_ms = now_ms;   // freshness for fsd_autopark_update
+        // Read-only performance read-out: accel/brake timers + est. G from the
+        // speed we just parsed (transmits nothing; dashboard "Performance" card).
+        fsd_perf_update(&g_state.perf, g_state.vehicle_speed_kph, now_ms);
         // Safety guard (#193): Palladium S/X don't broadcast 0x229 on Party, so
         // the gear-lever Summon disable can't fire there. Auto-disable Summon EU
         // Unlock on clear vehicle motion instead — platform-independent. Fresh,
@@ -1366,6 +1369,13 @@ static void process_frame(CanBusId bus, const CanFrame &frame) {
         state_enter();
         fsd_handle_esp_status(&g_state, &frame);
         if (g_state.driver_brake_applied) g_cont_ap_last_brake_ms = now_ms;
+        state_exit();
+        return;
+    }
+    // Wheel speeds (0x175) — read-only, feeds the dashboard wheel-slip read-out.
+    if (frame.id == CAN_ID_ESP_WHEELSPD) {
+        state_enter();
+        fsd_handle_wheel_speeds(&g_state, &frame);
         state_exit();
         return;
     }

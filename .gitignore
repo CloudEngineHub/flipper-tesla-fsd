@@ -13,5 +13,6 @@ __pycache__/
 # host unit-test binaries (test/Makefile)
 test/test_fsd_core
 test/test_esp32_core
+test/test_can_capture_filter
 *.dSYM/
 /.vs

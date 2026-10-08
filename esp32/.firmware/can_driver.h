@@ -71,13 +71,17 @@ public:
      *  on software filtering, which decimates a single id on a busy bus. */
     virtual void setAcceptanceFilter(bool single, uint32_t id) { (void)single; (void)id; }
 
-    /** Restrict hardware reception to a small exact-id whitelist, or restore
-     *  accept-all when count is zero. Drivers with limited hardware support may
-     *  only apply single-id lists and otherwise fall back to accept-all. */
+    /** Restrict reception to up to six standard IDs, or restore accept-all
+     *  when count is zero. MCP2515 matches exactly; TWAI matches common bits
+     *  and needs software filtering to enforce a multi-ID list. */
     virtual void setAcceptanceFilters(const uint32_t *ids, uint8_t count) {
         if (count == 1 && ids) setAcceptanceFilter(true, ids[0]);
         else setAcceptanceFilter(false, 0);
     }
+
+    /** Actual reception filter state for capture metadata. Unknown is used
+     *  when a driver cannot report successful hardware programming. */
+    virtual const char *acceptanceFilterMode() { return "unknown"; }
 
     /** Whether the underlying CAN hardware was detected on the bus/SPI.
      *  TWAI lives inside the SoC and is therefore always present.

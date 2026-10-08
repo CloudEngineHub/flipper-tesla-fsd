@@ -54,7 +54,7 @@
 - **Legacy→HW3 自动升级**（Palladium Model S/X）— 先检测到 `das_hw=0`，之后当 `0x3FD` 出现在总线上时升级
 - 通过修改 `UI_autopilotControl`（`0x3FD` / `0x3EE`）的 bit 来解锁 FSD
 - **Legacy 模式**，支持 HW1/HW2（Model S/X 2016-2019）
-- 速度档位默认最快，并从跟车距离拨杆同步
+- 速度档位默认最快，并从跟车距离拨杆同步（HW4 / Legacy）。HW3 上保留车辆自己的 FSD 速度偏移和档位；ESP32 的 **HW3 Speed Override** 开关可恢复旧的跟车距离 / Autopilot 偏移写入（[#209](https://github.com/hypery11/flipper-tesla-fsd/issues/209)）
 
 ### TLSSC Restore（v2.10+）
 - 在 **VIN 被封禁** 的车辆上恢复交通信号灯与停车标志控制
@@ -112,7 +112,7 @@
 
 ### 设置（运行时开关）
 
-大多数开关两个版本都有。仅 Flipper：GTW Config Replay、Emerg. Vehicle、ScrollPress AP、Nav FSD Route、Lane Graph、Tier Override、Dev Mode、Hands-Off、Force LHD、MCP Crystal。仅 ESP32：FSD Unlock（`0x3FD` FSD bit 的总开关，默认关闭）、Ignore OTA、Abort Guard、Continuous AP、China Mode、右舵（RHD）、上面的额外解锁，以及 Hardware 选择器（Flipper 则在主菜单用 Force HW3/HW4/Legacy）。
+大多数开关两个版本都有。仅 Flipper：GTW Config Replay、Emerg. Vehicle、ScrollPress AP、Nav FSD Route、Lane Graph、Tier Override、Dev Mode、Hands-Off、Force LHD、MCP Crystal。仅 ESP32：FSD Unlock（`0x3FD` FSD bit 的总开关，默认关闭）、HW3 Speed Override、Ignore OTA、Abort Guard、Continuous AP、China Mode、右舵（RHD）、上面的额外解锁，以及 Hardware 选择器（Flipper 则在主菜单用 Force HW3/HW4/Legacy）。
 
 **稳定（已上车测试）：**
 
@@ -169,7 +169,7 @@
 | Tesla HW | 修改的 Bits | 速度档位 |
 |----------|------------|----------|
 | Legacy（HW1/HW2） | bit46 | 3 段（0-2） |
-| HW3 | bit46 | 3 段（0-2） |
+| HW3 | bit46 | 车辆自己的（开启 HW3 Speed Override 时 3 段） |
 | HW4（FSD V14+） | bit46 + bit60 | 5 段（0-4） |
 
 ---

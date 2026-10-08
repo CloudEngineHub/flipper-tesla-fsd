@@ -51,7 +51,7 @@
 - **Legacy→HW3 auto-upgrade** for Palladium Model S/X — detects `das_hw=0` then upgrades when `0x3FD` appears on the bus
 - FSD unlock via bit manipulation on `UI_autopilotControl` (`0x3FD` / `0x3EE`)
 - **Legacy mode** for HW1/HW2 (Model S/X 2016-2019)
-- Speed profile defaults to fastest, syncs from follow-distance stalk
+- Speed profile defaults to fastest, syncs from follow-distance stalk (HW4 / Legacy). On HW3 the car's own FSD speed offset and profile are left alone; the ESP32 **HW3 Speed Override** toggle brings back the old follow-distance / Autopilot-offset write ([#209](https://github.com/hypery11/flipper-tesla-fsd/issues/209))
 
 ### TLSSC Restore (v2.10+)
 - Recover Traffic Light and Stop Sign Control on **VIN-banned** vehicles
@@ -109,7 +109,7 @@ ESP32 dashboard only for now — the Flipper menu doesn't have these toggles, so
 
 ### Settings (runtime toggles)
 
-Most toggles are on both builds. Flipper only: GTW Config Replay, Emerg. Vehicle, ScrollPress AP, Nav FSD Route, Lane Graph, Tier Override, Dev Mode, Hands-Off, Force LHD, MCP Crystal. ESP32 only: FSD Unlock (master switch for the `0x3FD` FSD bits, off by default), Ignore OTA, Abort Guard, Continuous AP, China Mode, Right-Hand Drive, the Extra unlocks above and the Hardware selector (the Flipper uses Force HW3/HW4/Legacy in its main menu).
+Most toggles are on both builds. Flipper only: GTW Config Replay, Emerg. Vehicle, ScrollPress AP, Nav FSD Route, Lane Graph, Tier Override, Dev Mode, Hands-Off, Force LHD, MCP Crystal. ESP32 only: FSD Unlock (master switch for the `0x3FD` FSD bits, off by default), HW3 Speed Override, Ignore OTA, Abort Guard, Continuous AP, China Mode, Right-Hand Drive, the Extra unlocks above and the Hardware selector (the Flipper uses Force HW3/HW4/Legacy in its main menu).
 
 **Stable (car-tested):**
 
@@ -166,7 +166,7 @@ These target Tesla 2026.14.x / 2026.20 behaviour and are all **off by default**.
 | Tesla HW | Bits Modified | Speed Profile |
 |----------|---------------|---------------|
 | Legacy (HW1/HW2) | bit46 | 3 levels (0-2) |
-| HW3 | bit46 | 3 levels (0-2) |
+| HW3 | bit46 | car's own (3 levels with HW3 Speed Override) |
 | HW4 (FSD V14+) | bit46 + bit60 | 5 levels (0-4) |
 
 ---

@@ -385,25 +385,34 @@ Full-rate vs. decimated:
   rising `rx_missed`.
 - **Single-ID capture** (`/stream?ids=<one id>`) — installs a **hardware
   acceptance filter** for that id, so the controller only queues matching
-  frames = **full-rate** for that id. `?ids=` also accepts a comma list, and
-  `?bus=can0|can1` scopes to one controller. (Listen-Only only. In Active
-  mode a single-ID capture falls back to software filtering, so injection
-  keeps its RX path.)
+  standard IDs. Check both drop counters before treating the capture as complete.
+- **Multi-ID capture** (`/stream?ids=399,3FD`) — up to six IDs use exact
+  MCP2515 filters and a TWAI common-bit hardware prefilter, with software
+  filtering enforcing the requested list. The TWAI prefilter can also admit
+  unrelated IDs, so its reduction in traffic depends on the IDs selected.
+  `?bus=can0|can1` scopes hardware filtering to one controller.
+- Hardware capture filters apply only in **Listen-Only**. Active mode and
+  lists exceeding six IDs use software filtering and keep hardware accept-all.
 
 Self-labeling captures (`?meta=1`):
 
-Add `?meta=1` (e.g. `/stream?ids=39B&meta=1`) to bracket the capture with two
+Add `?meta=1` (e.g. `/stream?ids=39B&meta=1`) to label the capture with
 `#`-prefixed comment lines that candump/SavvyCAN importers ignore:
 
 ```
-# capture ids=39B bus=all mode=single-id-hwfilter rx_missed_at_start=0
+# capture ids=39B bus=all mode=pending rx_missed_at_start=0
+# filters elapsed_ms=0 can0=exact can1=exact mode=single-id-hwfilter
 (0.001234) can0 39B#DEADBEEF...
 # end sent=1024 dropped=0 filtered=0 rx_missed_delta=0
 ```
 
-`mode` is `single-id-hwfilter` when exactly one id filter is active, otherwise
-`all-id-decimated`. Without `?meta=1` the stream body is byte-for-byte identical
-to before, so existing tooling is unaffected.
+The initial header uses `pending`; a `# filters` line reports the actual driver
+state after synchronization and whenever it changes during the capture.
+`mode` distinguishes `single-id-hwfilter`, `multi-id-hwfilter` (MCP2515 exact),
+`multi-id-hwprefilter` (TWAI common bits), `software-filter`, and
+`all-id-decimated`. Missing controllers or failed filter changes report
+`unavailable` or `unknown`. The per-controller fields remain visible even when
+`?bus=` selects just one bus. Without `?meta=1`, no metadata comments are added.
 
 ---
 
